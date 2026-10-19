@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import Navigation from './src/navigation/Navigation';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -34,7 +34,7 @@ function App(): React.JSX.Element {
         <>
             <ThemeProvider>
                 <PassphraseProvider>
-                    <SafeAreaProvider>
+                    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
                         <ErrorBoundary>
                             {status === 'welcome' ? (
                                 <WelcomeScreen onContinue={handleWelcomeComplete} />

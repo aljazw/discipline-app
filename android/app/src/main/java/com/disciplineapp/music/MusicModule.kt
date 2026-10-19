@@ -44,6 +44,15 @@ class MusicModule(private val ctx: ReactApplicationContext) : ReactContextBaseJa
     /** The sleep timer changes through the session extras, not the player. */
     private val controllerListener = object : MediaController.Listener {
         override fun onExtrasChanged(controller: MediaController, extras: Bundle) = emit(controller)
+
+        /** The service stopped (closed from the notification): connect afresh on the next call. */
+        override fun onDisconnected(controller: MediaController) {
+            val future = this@MusicModule.controller
+            if (future != null && future.isDone && runCatching { future.get() }.getOrNull() === controller) {
+                this@MusicModule.controller = null
+            }
+            controller.release()
+        }
     }
 
     /**

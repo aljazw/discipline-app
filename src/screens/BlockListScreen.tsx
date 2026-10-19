@@ -130,21 +130,12 @@ const BlockListScreen: React.FC = () => {
             title="Blocks"
             subtitle="The websites and apps you keep away from"
             headerRight={
-                <View style={styles.headerButtons}>
-                    <IconButton
-                        icon="Settings"
-                        variant="outline"
-                        accessibilityLabel="Settings"
-                        onPress={() => navigation.navigate('Settings')}
-                    />
-                    <IconButton
-                        icon="Plus"
-                        variant="filled"
-                        accessibilityLabel="Add a block"
-                        onPress={goToAdd}
-                        style={styles.headerGap}
-                    />
-                </View>
+                <IconButton
+                    icon="Settings"
+                    variant="outline"
+                    accessibilityLabel="Settings"
+                    onPress={() => navigation.navigate('Settings')}
+                />
             }>
             <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                 {/* ---- Protection status ---- */}
@@ -200,7 +191,22 @@ const BlockListScreen: React.FC = () => {
                 </FadeIn>
 
                 {/* ---- Block list ---- */}
-                <SectionHeader title={`Block list · ${visible.length}`} />
+                <SectionHeader
+                    title={`Block list · ${visible.length}`}
+                    right={
+                        visible.length > 0 && (
+                            <Button
+                                label="Add block"
+                                icon="Plus"
+                                iconLeading
+                                variant="ghost"
+                                compact
+                                onPress={goToAdd}
+                                style={styles.headerButton}
+                            />
+                        )
+                    }
+                />
                 {!listLoaded ? null : visible.length === 0 ? (
                     <EmptyState
                         icon="Ban"
@@ -359,11 +365,9 @@ const styles = StyleSheet.create({
     statusButton: {
         marginTop: spacing.md,
     },
-    headerButtons: {
-        flexDirection: 'row',
-    },
-    headerGap: {
-        marginLeft: spacing.sm,
+    headerButton: {
+        marginVertical: -8,
+        marginRight: -spacing.sm,
     },
     search: {
         marginHorizontal: gutter,

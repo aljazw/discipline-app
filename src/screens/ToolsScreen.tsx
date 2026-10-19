@@ -7,20 +7,25 @@ import { ListGroup, ListRow } from '../components/ListGroup';
 import { FadeIn } from '../components/Motion';
 import { spacing } from '../theme';
 import { RootStackNavigation } from '../types/types';
-import { getStoredNotes } from '../storage';
+import { getDayHours, getPlanPrefs, getStoredNotes } from '../storage';
 import { useMusic } from '../utils/music';
 
-/** The extra apps inside the app: music, apnea training and notes. */
+/** The extra apps inside the app: alarm, notes, music and apnea training. */
 const ToolsScreen: React.FC = () => {
     const navigation = useNavigation<RootStackNavigation>();
     const music = useMusic();
     const [noteCount, setNoteCount] = useState<number | null>(null);
+    /** The wake-up time while the alarm is on; null while it's off. */
+    const [alarmAt, setAlarmAt] = useState<string | null>(null);
 
     useFocusEffect(
         useCallback(() => {
             getStoredNotes()
                 .then(notes => setNoteCount(notes.length))
                 .catch(() => setNoteCount(null));
+            Promise.all([getPlanPrefs(), getDayHours()])
+                .then(([prefs, hours]) => setAlarmAt(prefs.wakeAlarm ? hours.wake : null))
+                .catch(() => setAlarmAt(null));
         }, []),
     );
 
@@ -38,6 +43,12 @@ const ToolsScreen: React.FC = () => {
                 <ApneaSessionBanner />
                 <FadeIn>
                     <ListGroup>
+                        <ListRow
+                            icon="Alarm"
+                            title="Wake-up alarm"
+                            description={alarmAt ? `On · rings at ${alarmAt}` : 'Off · wake up on time, every day'}
+                            onPress={() => navigation.navigate('DayHours')}
+                        />
                         <ListRow
                             icon="Notes"
                             title="Notes"

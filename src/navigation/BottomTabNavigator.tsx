@@ -1,6 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { BottomTabBar, BottomTabBarProps, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useNavigation } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import HabitsScreen from '../screens/HabitsScreen';
@@ -8,9 +7,7 @@ import ToolsScreen from '../screens/ToolsScreen';
 import BlockListScreen from '../screens/BlockListScreen';
 import WorkoutScreen from '../screens/WorkoutScreen';
 import { useTheme } from '../context/ThemeContext';
-import { MiniPlayer } from '../components/MusicPlayer';
-import { RootStackNavigation, TabParamList } from '../types/types';
-import { useMusic } from '../utils/music';
+import { TabParamList } from '../types/types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
@@ -32,27 +29,12 @@ const tabIcon =
     ({ color, focused }: { color: string; focused: boolean }) =>
         <Icon name={TAB_ICONS[name] ?? name} size={21} tint={color} strokeWidth={focused ? 2.1 : 1.8} />;
 
-/** The tab bar, with the music mini player on top of it while something is loaded. */
-const TabBar: React.FC<BottomTabBarProps> = props => {
-    const state = useMusic();
-    const navigation = useNavigation<RootStackNavigation>();
-    return (
-        <>
-            {state.count > 0 && <MiniPlayer state={state} onOpen={() => navigation.navigate('Music')} />}
-            <BottomTabBar {...props} />
-        </>
-    );
-};
-
-const renderTabBar = (props: BottomTabBarProps) => <TabBar {...props} />;
-
 const BottomTabNavigator: React.FC = () => {
     const { theme } = useTheme();
     const insets = useSafeAreaInsets();
 
     return (
         <Tab.Navigator
-            tabBar={renderTabBar}
             screenOptions={({ route }) => ({
                 headerShown: false,
                 // Hidden tabs stop re-rendering (timers, focus reloads) until they're shown again.

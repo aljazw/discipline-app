@@ -10,6 +10,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -54,10 +55,10 @@ class MusicService : MediaSessionService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            // Only the app itself may set the sleep timer.
-            if (controller.packageName != packageName) return super.onConnect(session, controller)
+            // Close is for everyone (notification, lock screen); only the app itself may set the sleep timer.
             val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
-                .add(SessionCommand(SLEEP_COMMAND, Bundle.EMPTY))
+                .add(SessionCommand(CLOSE_COMMAND, Bundle.EMPTY))
+                .apply { if (controller.packageName == packageName) add(SessionCommand(SLEEP_COMMAND, Bundle.EMPTY)) }
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
@@ -70,10 +71,11 @@ class MusicService : MediaSessionService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
-            if (customCommand.customAction != SLEEP_COMMAND) {
-                return super.onCustomCommand(session, controller, customCommand, args)
+            when (customCommand.customAction) {
+                SLEEP_COMMAND -> setSleep(args.getInt(SLEEP_MINUTES), args.getBoolean(SLEEP_END_OF_SONG))
+                CLOSE_COMMAND -> close()
+                else -> return super.onCustomCommand(session, controller, customCommand, args)
             }
-            setSleep(args.getInt(SLEEP_MINUTES), args.getBoolean(SLEEP_END_OF_SONG))
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
     }
@@ -101,7 +103,23 @@ class MusicService : MediaSessionService() {
         session = MediaSession.Builder(this, player)
             .setSessionActivity(openApp)
             .setCallback(callback)
+            .setMediaButtonPreferences(listOf(closeButton))
             .build()
+    }
+
+    /** The notification's close button: stops the music and takes the notification away. */
+    private val closeButton = CommandButton.Builder(CommandButton.ICON_STOP)
+        .setDisplayName("Close")
+        .setSessionCommand(SessionCommand(CLOSE_COMMAND, Bundle.EMPTY))
+        .setSlots(CommandButton.SLOT_FORWARD_SECONDARY, CommandButton.SLOT_OVERFLOW)
+        .build()
+
+    private fun close() {
+        val player = session?.player ?: return
+        clearSleep()
+        player.stop()
+        player.clearMediaItems()
+        stopSelf()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
@@ -163,6 +181,7 @@ class MusicService : MediaSessionService() {
 
     companion object {
         const val SLEEP_COMMAND = "com.disciplineapp.music.SLEEP"
+        const val CLOSE_COMMAND = "com.disciplineapp.music.CLOSE"
         const val SLEEP_MINUTES = "minutes"
         const val SLEEP_END_OF_SONG = "endOfSong"
         /** Epoch millis of the timed stop; 0 = none. */

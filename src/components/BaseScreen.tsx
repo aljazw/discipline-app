@@ -4,7 +4,7 @@ import { gutter, spacing } from '../theme';
 import { ThemedText } from './ThemedText';
 import changeNavigationBarColor from 'react-native-navigation-bar-color';
 import { useTheme } from '../context/ThemeContext';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface BaseScreenProps {
     children: React.ReactNode;
@@ -28,15 +28,27 @@ const BaseScreen: React.FC<BaseScreenProps> = ({
     showHeader = true,
 }) => {
     const { theme, isDarkMode } = useTheme();
+    // Padding from the shared insets rather than a SafeAreaView per screen: that one
+    // measures itself again when a screen comes back into view, so the header jumped
+    // for a frame during the back animation.
+    const insets = useSafeAreaInsets();
 
     useEffect(() => {
         changeNavigationBarColor(theme.colors.card, !isDarkMode);
     }, [isDarkMode, theme.colors.card]);
 
     return (
-        <SafeAreaView
-            edges={['top', 'left', 'right']}
-            style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
+        <View
+            style={[
+                styles.container,
+                {
+                    backgroundColor: theme.colors.background,
+                    paddingTop: insets.top,
+                    paddingLeft: insets.left,
+                    paddingRight: insets.right,
+                },
+                style,
+            ]}>
             <StatusBar
                 barStyle={isDarkMode ? 'light-content' : 'dark-content'}
                 backgroundColor={theme.colors.background}
@@ -63,7 +75,7 @@ const BaseScreen: React.FC<BaseScreenProps> = ({
             <View style={[styles.content, style]}>
                 {isLoading ? <ActivityIndicator size="large" color={theme.colors.accent} /> : children}
             </View>
-        </SafeAreaView>
+        </View>
     );
 };
 
