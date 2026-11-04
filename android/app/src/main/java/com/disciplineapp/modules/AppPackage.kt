@@ -9,6 +9,7 @@ import com.disciplineapp.VpnControlModule
 import com.disciplineapp.WatchdogModule
 import com.disciplineapp.alarm.WakeAlarmModule
 import com.disciplineapp.apnea.ApneaModule
+import com.disciplineapp.map.MapModule
 import com.disciplineapp.music.MusicModule
 import com.disciplineapp.notes.NoteCryptoModule
 import com.disciplineapp.video.PromiseVideoModule
@@ -32,6 +33,7 @@ class AppPackage : ReactPackage {
             WakeAlarmModule(reactContext),
             PromiseVideoModule(reactContext),
             NoteCryptoModule(reactContext),
+            MapModule(reactContext),
         )
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()

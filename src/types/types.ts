@@ -42,9 +42,49 @@ export type RootStackParamList = {
     Notes: undefined;
     /** No noteId = a new note. */
     NoteEditor: { noteId?: string } | undefined;
+    /** The map; optionally zoomed to a saved place, or navigating to one. */
+    Map: { show?: MapTarget; navigate?: MapTarget } | undefined;
+    /** Saved places, routes, tracks and map files. */
+    MapLibrary: { tab?: MapLibraryTab } | undefined;
 };
 
-export type RoutineView = 'today' | 'tomorrow' | 'routine';
+export type MapLibraryTab = 'marks' | 'routes' | 'tracks' | 'maps';
+
+export type RoutineView = 'next' | 'today' | 'tomorrow' | 'routine';
+
+// ---- To-dos (one-time things) -----------------------------------------------
+
+/** A smaller step of a to-do, done before the to-do itself. */
+export interface TodoStep {
+    id: string;
+    title: string;
+    /** Epoch ms. */
+    doneAt?: number;
+    /** How long it really took, if given. */
+    minutes?: number;
+}
+
+/**
+ * Something to do once, e.g. "Call dentist". With steps it's a project: the
+ * open steps come first, one at a time, then the to-do itself.
+ */
+export interface Todo {
+    id: string;
+    title: string;
+    /** Epoch ms. */
+    createdAt: number;
+    steps: TodoStep[];
+    /** "Not now" taps on what's currently up (resets when a step is done or it's made smaller). */
+    postponed: number;
+    /** Local date "YYYY-MM-DD": put off until the day after this. */
+    snoozedOn?: string;
+    /** Takes under five minutes. */
+    quick?: boolean;
+    doneAt?: number;
+    droppedAt?: number;
+    /** How long the to-do itself took, if given. */
+    minutes?: number;
+}
 
 // ---- Day plan ---------------------------------------------------------------
 
@@ -316,6 +356,88 @@ export interface ApneaRecord {
     /** Number of holds the session planned. */
     planned: number;
     manual?: boolean;
+}
+
+// ---- Map --------------------------------------------------------------------
+
+export type MapTarget = { kind: 'mark' | 'route' | 'track'; id: string };
+
+/** [longitude, latitude], the order maps and GeoJSON use. */
+export type LngLat = [number, number];
+
+export type MarkKind = 'spot' | 'fish' | 'anchor' | 'danger' | 'flag' | 'home' | 'camp';
+
+/** A saved place on the map, e.g. a fishing spot. */
+export interface MapMark {
+    id: string;
+    name: string;
+    kind: MarkKind;
+    lat: number;
+    lon: number;
+    note: string;
+    createdAt: number;
+}
+
+/** A planned route: points to pass in order. */
+export interface MapRoute {
+    id: string;
+    name: string;
+    points: LngLat[];
+    createdAt: number;
+}
+
+export type MapUnits = 'metric' | 'nautical' | 'imperial';
+/** Decimal degrees, degrees + decimal minutes (charts), or degrees, minutes, seconds. */
+export type CoordFormat = 'dd' | 'dm' | 'dms';
+
+/** An online map: built in, or added by the user as an XYZ tile URL or a style URL. */
+export interface OnlineMap {
+    id: string;
+    name: string;
+    url: string;
+    /** "raster" = an XYZ template with {z}/{x}/{y}; "style" = a MapLibre style JSON URL. */
+    type: 'raster' | 'style';
+    maxZoom?: number;
+    attribution?: string;
+}
+
+export interface MapPrefs {
+    /** "file:<id>" for an offline map, "online:<id>" for an online one. */
+    base: string;
+    /** OpenSeaMap sea marks over the base map. */
+    seamarks: boolean;
+    showMarks: boolean;
+    showTracks: boolean;
+    units: MapUnits;
+    coords: CoordFormat;
+    keepAwake: boolean;
+    /** Online maps the user added. */
+    custom: OnlineMap[];
+    /** Where the map was last left: [lon, lat], zoom. */
+    camera?: { center: LngLat; zoom: number };
+    /** The map to go back to when the satellite button is tapped again. */
+    previousBase?: string;
+}
+
+/** A saved track as listed (no full points). Distances in meters, speeds m/s. */
+export interface TrackSummary {
+    id: string;
+    name: string;
+    startedAt: number;
+    endedAt: number;
+    distance: number;
+    movingMs: number;
+    maxSpeed: number;
+    pointCount: number;
+    /** A thinned outline, [lat, lon] pairs. */
+    preview: [number, number][];
+}
+
+/** One recorded fix: [lat, lon, altitude m, time ms, speed m/s]. */
+export type TrackPoint = [number, number, number, number, number];
+
+export interface Track extends Omit<TrackSummary, 'preview' | 'pointCount'> {
+    points: TrackPoint[];
 }
 
 export type RootStackNavigation = NavigationProp<RootStackParamList>;

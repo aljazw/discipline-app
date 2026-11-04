@@ -40,6 +40,10 @@ export const KEYS = {
     notesVault: '@notes_vault',
     /** Today's time on blocks with a daily limit; written by BlockAccessibilityService (UsageLimits.kt). */
     limitUsage: '@limit_usage',
+    mapMarks: '@map_marks',
+    mapRoutes: '@map_routes',
+    mapPrefs: '@map_prefs',
+    todos: '@todos',
 } as const;
 
 // ---- Cache ------------------------------------------------------------------

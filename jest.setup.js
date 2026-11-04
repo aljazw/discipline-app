@@ -22,3 +22,19 @@ jest.mock('@notifee/react-native', () => ({
 
 
 jest.mock('react-native-navigation-bar-color', () => jest.fn());
+
+/** The map view is native-only; screens importing it render plain views in tests. */
+jest.mock('@maplibre/maplibre-react-native', () => {
+    const React = require('react');
+    const Stub = ({ children }) => React.createElement(React.Fragment, null, children);
+    return {
+        MapView: Stub,
+        Camera: React.forwardRef((props, ref) => null),
+        UserLocation: () => null,
+        ShapeSource: Stub,
+        LineLayer: () => null,
+        CircleLayer: () => null,
+        MarkerView: Stub,
+        UserTrackingMode: { Follow: 'normal', FollowWithHeading: 'compass', FollowWithCourse: 'course' },
+    };
+});

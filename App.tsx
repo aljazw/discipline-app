@@ -4,12 +4,22 @@ import Navigation from './src/navigation/Navigation';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { PassphraseProvider } from './src/context/PassphraseContext';
-import { ThemeProvider } from './src/context/ThemeContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { useAppInitializer } from './src/hooks/useAppInitializer';
 import { darkTheme } from './src/theme/dark';
 import { setUserHasSeenWelcome } from './src/storage';
 import { openAccessibilitySettings } from './src/utils/accessibility';
 import { logger } from './src/utils/logger';
+
+/**
+ * Paints the theme background behind everything. Without it Android's default
+ * window color (a lighter gray) shows for a moment while a screen comes back
+ * into view on back navigation.
+ */
+const ThemedRoot: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { theme } = useTheme();
+    return <View style={[styles.root, { backgroundColor: theme.colors.background }]}>{children}</View>;
+};
 
 function App(): React.JSX.Element {
     const { status, setStatus } = useAppInitializer();
@@ -33,23 +43,28 @@ function App(): React.JSX.Element {
     return (
         <>
             <ThemeProvider>
-                <PassphraseProvider>
-                    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-                        <ErrorBoundary>
-                            {status === 'welcome' ? (
-                                <WelcomeScreen onContinue={handleWelcomeComplete} />
-                            ) : (
-                                <Navigation />
-                            )}
-                        </ErrorBoundary>
-                    </SafeAreaProvider>
-                </PassphraseProvider>
+                <ThemedRoot>
+                    <PassphraseProvider>
+                        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+                            <ErrorBoundary>
+                                {status === 'welcome' ? (
+                                    <WelcomeScreen onContinue={handleWelcomeComplete} />
+                                ) : (
+                                    <Navigation />
+                                )}
+                            </ErrorBoundary>
+                        </SafeAreaProvider>
+                    </PassphraseProvider>
+                </ThemedRoot>
             </ThemeProvider>
         </>
     );
 }
 
 const styles = StyleSheet.create({
+    root: {
+        flex: 1,
+    },
     splash: {
         flex: 1,
         backgroundColor: darkTheme.colors.background,

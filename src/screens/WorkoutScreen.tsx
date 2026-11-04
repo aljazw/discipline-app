@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { RootStackNavigation, Workout, WorkoutRecord } from '../types/types';
+import { RootStackNavigation, Workout } from '../types/types';
 import BaseScreen from '../components/BaseScreen';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -20,18 +20,13 @@ import { useTheme } from '../context/ThemeContext';
 import { useWorkoutData } from '../hooks/useWorkoutData';
 import { gutter, spacing } from '../theme';
 import { formatClock } from '../utils/apnea';
-import { newId, shortDate, startOfWeek } from '../utils/dates';
+import { newId, startOfWeek } from '../utils/dates';
 import { currentExercise, describeWorkout, recordsSince, startSession, STARTER_WORKOUTS } from '../utils/workout';
-import { deleteWorkoutRecord, saveWorkout, setWorkoutSession } from '../storage';
+import { saveWorkout, setWorkoutSession } from '../storage';
 import { haptics } from '../utils/haptics';
 import { ERRORS } from '../constants/strings';
 
-type Dialog = { kind: 'busy' } | { kind: 'record'; record: WorkoutRecord } | { kind: 'error' };
-
-const RECENT_COUNT = 5;
-
-const describeRecord = (r: WorkoutRecord) =>
-    `${shortDate(new Date(r.startedAt))} · ${r.setsDone}/${r.setsTotal} sets · ${formatClock(r.endedAt - r.startedAt)}`;
+type Dialog = { kind: 'busy' } | { kind: 'error' };
 
 const WorkoutScreen: React.FC = () => {
     const { theme } = useTheme();
@@ -43,7 +38,6 @@ const WorkoutScreen: React.FC = () => {
     const week = useMemo(() => recordsSince(records, startOfWeek(new Date()).getTime()), [records]);
     const weekSets = week.reduce((sum, r) => sum + r.setsDone, 0);
     const weekMs = week.reduce((sum, r) => sum + (r.endedAt - r.startedAt), 0);
-    const recent = useMemo(() => [...records].reverse().slice(0, RECENT_COUNT), [records]);
     const live = session && session.phase !== 'done' ? session : null;
 
     const start = async (workout: Workout) => {
@@ -70,13 +64,6 @@ const WorkoutScreen: React.FC = () => {
                 setDialog({ kind: 'error' });
                 break;
             }
-        }
-    };
-
-    const deleteRecord = async (record: WorkoutRecord) => {
-        close();
-        if (!(await deleteWorkoutRecord(record.id))) {
-            setDialog({ kind: 'error' });
         }
     };
 
@@ -179,24 +166,6 @@ const WorkoutScreen: React.FC = () => {
                     ))
                 )}
 
-                {/* ---- History ---- */}
-                {recent.length > 0 && (
-                    <>
-                        <SectionHeader title="Recent" />
-                        <ListGroup>
-                            {recent.map(record => (
-                                <ListRow
-                                    key={record.id}
-                                    icon={record.completed ? 'Selected' : 'Timer'}
-                                    title={record.title}
-                                    description={describeRecord(record)}
-                                    onPress={() => setDialog({ kind: 'record', record })}
-                                />
-                            ))}
-                        </ListGroup>
-                    </>
-                )}
-
                 {/* ---- Cues ---- */}
                 <SectionHeader title="Cues" />
                 <ListGroup>
@@ -222,27 +191,6 @@ const WorkoutScreen: React.FC = () => {
                     close();
                     navigation.navigate('WorkoutSession');
                 })}
-            />
-            <Dialog
-                visible={dialog?.kind === 'record'}
-                onClose={close}
-                icon={dialog?.kind === 'record' && dialog.record.completed ? 'Selected' : 'Timer'}
-                title={dialog?.kind === 'record' ? dialog.record.title : ''}
-                message={
-                    dialog?.kind === 'record'
-                        ? `${describeRecord(dialog.record)}\n${
-                              dialog.record.completed ? 'Finished to the end.' : 'Ended early.'
-                          }`
-                        : ''
-                }
-                actions={[
-                    {
-                        label: 'Delete',
-                        variant: 'danger',
-                        onPress: () => (dialog?.kind === 'record' ? deleteRecord(dialog.record) : undefined),
-                    },
-                    { label: 'Close', variant: 'secondary', onPress: close },
-                ]}
             />
             <ErrorPopup {...ERRORS.saveFailed} visible={dialog?.kind === 'error'} onClose={close} />
         </BaseScreen>

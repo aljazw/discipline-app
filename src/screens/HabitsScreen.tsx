@@ -19,6 +19,7 @@ import { useFocusData } from '../hooks/useFocusData';
 import { usePreloadTabs } from '../navigation/usePreloadTabs';
 import { gutter, spacing } from '../theme';
 import DayView from './DayView';
+import NextView from './NextView';
 import { addDays, toDateKey } from '../utils/dates';
 import { playPromiseVideoOncePerDay } from '../utils/promiseVideo';
 import { minutesNow } from '../utils/dayPlan';
@@ -28,6 +29,7 @@ import { DEFAULT_PLAN_PREFS, STORAGE_KEYS, getPlanPrefs, saveHabits, setPlanPref
 import { ERRORS } from '../constants/strings';
 
 const VIEWS: { value: RoutineView; label: string }[] = [
+    { value: 'next', label: 'Next' },
     { value: 'today', label: 'Today' },
     { value: 'tomorrow', label: 'Tomorrow' },
     { value: 'routine', label: 'Routine' },
@@ -40,7 +42,7 @@ const dateLabel = (date: Date) =>
 const HabitsScreen: React.FC = () => {
     const navigation = useNavigation<RootStackNavigation>();
     const route = useRoute<RouteProp<TabParamList, 'Habits'>>();
-    const [view, setView] = useState<RoutineView>(route.params?.view ?? 'today');
+    const [view, setView] = useState<RoutineView>(route.params?.view ?? 'next');
     const [now, setNow] = useState(new Date());
     usePreloadTabs();
 
@@ -67,27 +69,36 @@ const HabitsScreen: React.FC = () => {
 
     const tomorrow = addDays(now, 1);
     const subtitle =
-        view === 'routine' ? 'What you do, and on which days' : dateLabel(view === 'today' ? now : tomorrow);
+        view === 'next'
+            ? 'One thing at a time'
+            : view === 'routine'
+            ? 'What you do, and on which days'
+            : dateLabel(view === 'today' ? now : tomorrow);
+    const title = { next: 'Next', routine: 'Routine', today: 'Today', tomorrow: 'Tomorrow' }[view];
 
     return (
         <BaseScreen
-            title={view === 'routine' ? 'Routine' : view === 'today' ? 'Today' : 'Tomorrow'}
+            title={title}
             subtitle={subtitle}
             headerRight={
-                <IconButton
-                    icon="Plus"
-                    variant="filled"
-                    accessibilityLabel="Add a task"
-                    onPress={() =>
-                        navigation.navigate(
-                            'TaskEditor',
-                            view === 'routine' ? undefined : { date: toDateKey(view === 'today' ? now : tomorrow) },
-                        )
-                    }
-                />
+                view === 'next' ? undefined : (
+                    <IconButton
+                        icon="Plus"
+                        variant="filled"
+                        accessibilityLabel="Add a task"
+                        onPress={() =>
+                            navigation.navigate(
+                                'TaskEditor',
+                                view === 'routine' ? undefined : { date: toDateKey(view === 'today' ? now : tomorrow) },
+                            )
+                        }
+                    />
+                )
             }>
             <Segmented options={VIEWS} value={view} onChange={setView} style={styles.views} />
-            {view === 'today' ? (
+            {view === 'next' ? (
+                <NextView />
+            ) : view === 'today' ? (
                 <DayView key="today" dateKey={toDateKey(now)} now={minutesNow(now)} />
             ) : view === 'tomorrow' ? (
                 <DayView key="tomorrow" dateKey={toDateKey(tomorrow)} now={null} />

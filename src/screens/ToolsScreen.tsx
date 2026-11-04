@@ -10,7 +10,7 @@ import { RootStackNavigation } from '../types/types';
 import { getDayHours, getPlanPrefs, getStoredNotes } from '../storage';
 import { useMusic } from '../utils/music';
 
-/** The extra apps inside the app: alarm, notes, music and apnea training. */
+/** The extra apps inside the app: alarm, map, notes, music and apnea training. */
 const ToolsScreen: React.FC = () => {
     const navigation = useNavigation<RootStackNavigation>();
     const music = useMusic();
@@ -48,6 +48,12 @@ const ToolsScreen: React.FC = () => {
                             title="Wake-up alarm"
                             description={alarmAt ? `On · rings at ${alarmAt}` : 'Off · wake up on time, every day'}
                             onPress={() => navigation.navigate('DayHours')}
+                        />
+                        <ListRow
+                            icon="Map"
+                            title="Map"
+                            description="Offline charts, your speed and heading, places and tracks"
+                            onPress={() => navigation.navigate('Map')}
                         />
                         <ListRow
                             icon="Notes"

@@ -3,7 +3,8 @@
  *
  * Export takes everything worth keeping: blocks, the routine and day plans, workouts
  * and their history, apnea tables, records and settings, notes, sleep time,
- * vacation, appearance, the music folder and the DNS resolver.
+ * vacation, appearance, the music folder, the DNS resolver, and the map's
+ * saved places, routes and settings (tracks and map files stay on the phone).
  *
  * Protected notes go into the file exactly as stored: encrypted, next to the
  * key that's wrapped with the notes password. The password itself is stored
@@ -36,6 +37,7 @@ const DNS_UPSTREAM = '@dns_upstream';
 /** Restored by replacing the current value. Lists must be arrays, the rest objects or flags. */
 const REPLACED = {
     habits: { key: KEYS.habits, kind: 'list' },
+    todos: { key: KEYS.todos, kind: 'list' },
     days: { key: KEYS.days, kind: 'list' },
     planPrefs: { key: KEYS.planPrefs, kind: 'object' },
     dayHours: { key: KEYS.dayHours, kind: 'object' },
@@ -51,6 +53,9 @@ const REPLACED = {
     // The key before the notes it opens, so the two always arrive together.
     notesVault: { key: KEYS.notesVault, kind: 'object' },
     notes: { key: KEYS.notes, kind: 'list' },
+    mapMarks: { key: KEYS.mapMarks, kind: 'list' },
+    mapRoutes: { key: KEYS.mapRoutes, kind: 'list' },
+    mapPrefs: { key: KEYS.mapPrefs, kind: 'object' },
 } as const;
 
 type ReplacedName = keyof typeof REPLACED;
@@ -128,6 +133,7 @@ export const describeBackup = (backup: Backup): string => {
         [count(d.websites), 'blocked site'],
         [count(d.apps), 'blocked app'],
         [count(d.habits), 'routine task'],
+        [count(d.todos), 'to-do'],
         [count(d.workouts), 'workout'],
         [count(d.workoutRecords), 'workout session'],
         [count(d.apneaTables), 'apnea table'],

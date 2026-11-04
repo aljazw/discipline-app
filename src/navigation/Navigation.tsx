@@ -19,6 +19,8 @@ import WorkoutEditorScreen from '../screens/WorkoutEditorScreen';
 import WorkoutSessionScreen from '../screens/WorkoutSessionScreen';
 import NotesScreen from '../screens/NotesScreen';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
+import MapScreen from '../screens/MapScreen';
+import MapLibraryScreen from '../screens/MapLibraryScreen';
 import PlanNudge from '../components/PlanNudge';
 import { RootStackParamList } from '../types/types';
 import { useAppForeground } from '../hooks/useAppForeground';
@@ -39,6 +41,7 @@ const NO_NUDGE: string[] = [
     'WorkoutEditor',
     'Schedule',
     'NoteEditor',
+    'Map',
 ];
 
 const canNudge = () => {
@@ -132,6 +135,9 @@ const Navigation: React.FC = () => {
                 <Stack.Screen name="WorkoutEditor" component={WorkoutEditorScreen} />
                 <Stack.Screen name="Notes" component={NotesScreen} />
                 <Stack.Screen name="NoteEditor" component={NoteEditorScreen} />
+                {/* Panning the map from the left edge must not swipe the screen away. */}
+                <Stack.Screen name="Map" component={MapScreen} options={{ gestureEnabled: false }} />
+                <Stack.Screen name="MapLibrary" component={MapLibraryScreen} />
                 <Stack.Screen
                     name="WorkoutSession"
                     component={WorkoutSessionScreen}
