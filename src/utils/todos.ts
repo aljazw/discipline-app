@@ -135,3 +135,25 @@ export const pruneFinished = (todos: Todo[]): Todo[] => {
     const removed = new Set(finished.slice(MAX_FINISHED).map(t => t.id));
     return todos.filter(t => !removed.has(t.id));
 };
+
+/** The one extra day picked after a small task ran out of time. */
+export const pickDay = (todo: Todo, dateKey: string): Todo => ({ ...fresh(todo), dueOn: dateKey });
+
+/** Dropped, with the reason why (shown in the weekly review). */
+export const dropWithReason = (todo: Todo, now: number, reason: string): Todo => ({
+    ...todo,
+    droppedAt: now,
+    dropReason: reason.trim(),
+});
+
+/** Today's part of a big task is skipped, with the reason why. */
+export const skipSlice = (todo: Todo, dateKey: string, reason: string): Todo => ({
+    ...todo,
+    skips: { ...todo.skips, [dateKey]: reason.trim() },
+});
+
+/** Adds minutes worked on a day (a big task with daily time). */
+export const logTime = (todo: Todo, dateKey: string, minutes: number): Todo => ({
+    ...todo,
+    log: { ...todo.log, [dateKey]: Math.min(24 * 60, (todo.log?.[dateKey] ?? 0) + Math.max(0, Math.round(minutes))) },
+});

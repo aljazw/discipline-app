@@ -5,13 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import com.disciplineapp.alarm.WakeAlarm
+import com.disciplineapp.plan.PlanCalls
 
 /**
  * Restarts the protection layers after a reboot or an app update.
  *
  *  - DNS VPN: restarted only if it was on AND consent is still granted
  *    (VpnService.prepare returns null when already consented).
- *  - Wake-up alarm: alarms don't survive a reboot, so it's armed again.
+ *  - Wake-up alarm and plan calls: alarms don't survive a reboot, so they're armed again.
  *
  * Note: Android will NOT deliver these broadcasts after a manual "Force stop"
  * until the app is opened again — an OS guarantee no ordinary app can bypass
@@ -30,6 +31,7 @@ class BootReceiver : BroadcastReceiver() {
                     DnsVpnService.start(context)
                 }
                 WakeAlarm.schedule(context)
+                PlanCalls.schedule(context)
             }
         }
     }

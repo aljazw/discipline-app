@@ -1,10 +1,12 @@
 /** Pure streak logic for habits, over local "YYYY-MM-DD" day keys (see dates.ts). */
-import { Habit } from '../types/types';
+import { Habit, HabitKind } from '../types/types';
 import { addDays, fromDateKey, newId, toDateKey, weekdayIndex } from './dates';
 
 export { addDays, fromDateKey, toDateKey, weekdayIndex };
 
-export const isScheduled = (habit: Habit, date: Date): boolean => habit.days[weekdayIndex(date)] === true;
+/** Due on this day: on one of its weekdays, or on its one date. */
+export const isScheduled = (habit: Habit, date: Date): boolean =>
+    habit.once ? habit.once === toDateKey(date) : habit.days[weekdayIndex(date)] === true;
 
 export const isDoneOn = (habit: Habit, date: Date): boolean => habit.completions.includes(toDateKey(date));
 
@@ -47,7 +49,7 @@ export const currentStreak = (habit: Habit, today: Date = new Date()): number =>
  * still pending and doesn't break it.
  */
 export const routineStreak = (habits: Habit[], today: Date = new Date()): number => {
-    const tracked = habits.filter(h => h.days.some(Boolean));
+    const tracked = habits.filter(h => h.kind === 'habit' && h.days.some(Boolean));
     if (tracked.length === 0) {
         return 0;
     }
@@ -133,7 +135,7 @@ export const recentDays = (habit: Habit, count = 7, today: Date = new Date()): D
 export const completionRate = (habits: Habit[], days = 7, today: Date = new Date()): number | null => {
     let due = 0;
     let done = 0;
-    for (const habit of habits) {
+    for (const habit of habits.filter(h => h.kind === 'habit')) {
         for (const day of recentDays(habit, days, today)) {
             if (!day.scheduled) {
                 continue;
@@ -168,3 +170,24 @@ export const markDone = (habit: Habit, date: Date = new Date()): Habit =>
     isDoneOn(habit, date) ? habit : toggleCompletion(habit, date);
 
 export const newHabitId = (): string => newId('h');
+
+/** Skipped on a day, with the reason why; a skipped day isn't done. */
+export const skipHabit = (habit: Habit, dateKey: string, reason: string): Habit => ({
+    ...habit,
+    completions: habit.completions.filter(k => k !== dateKey),
+    skips: { ...habit.skips, [dateKey]: reason.trim() },
+});
+
+/** Takes a skip back. */
+export const unskipHabit = (habit: Habit, dateKey: string): Habit => {
+    const rest = Object.fromEntries(Object.entries(habit.skips ?? {}).filter(([k]) => k !== dateKey));
+    return { ...habit, skips: Object.keys(rest).length ? rest : undefined };
+};
+
+/** Things you'd skip if nothing made you; anything else starts as a routine. */
+const HABIT_WORDS =
+    /workout|train|gym|run|learn|study|read|meditat|stretch|yoga|apnea|practi|exercise|walk|swim|journal|language|plank|cardio|lift/i;
+
+/** For data from before habits and routines were apart: guess from the link and the name. */
+export const guessKind = (title: string, link?: string): HabitKind =>
+    link || HABIT_WORDS.test(title) ? 'habit' : 'routine';

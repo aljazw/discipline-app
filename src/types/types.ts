@@ -2,7 +2,7 @@ import { NavigationProp, NavigatorScreenParams } from '@react-navigation/native'
 import type { IconName } from '../components/Icon';
 
 export type TabParamList = {
-    /** Opens on today, tomorrow or the routine list. */
+    /** The plan: today, tasks, habits or time. */
     Habits: { view?: RoutineView } | undefined;
     Workout: undefined;
     /** Music, apnea training and notes. */
@@ -17,11 +17,12 @@ export type RootStackParamList = {
     AddSite: undefined;
     /** Pass websiteUrl for a site, or app for an app. */
     Schedule: { websiteUrl?: string; app?: { packageName: string; appName: string } };
-    /**
-     * A routine task (habitId), a one-off task of a day (date + taskId), or a
-     * new task: with a date it starts as a one-off for that day (up next, today).
-     */
-    TaskEditor: { habitId?: string; date?: string; taskId?: string } | undefined;
+    /** A habit or routine (habitId), or a new one of `kind`. */
+    TaskEditor: { habitId?: string; kind?: HabitKind } | undefined;
+    /** A task (one-time thing): its size, steps or daily time. */
+    TodoEditor: { todoId: string };
+    /** A habit that's due or tasks out of time, opened by a plan call. */
+    PlanCall: { callId: string };
     /** A generated CO2/O2 table, or a custom one (no tableId = create, optionally prefilled). */
     ApneaTable: { kind: 'co2' | 'o2' } | { kind: 'custom'; tableId?: string; name?: string; rounds?: TableRound[] };
     /** The live (or just finished) training session. */
@@ -50,7 +51,7 @@ export type RootStackParamList = {
 
 export type MapLibraryTab = 'marks' | 'routes' | 'tracks' | 'maps';
 
-export type RoutineView = 'next' | 'today' | 'tomorrow' | 'routine';
+export type RoutineView = 'today' | 'tasks' | 'habits' | 'time';
 
 // ---- To-dos (one-time things) -----------------------------------------------
 
@@ -64,9 +65,18 @@ export interface TodoStep {
     minutes?: number;
 }
 
+/** A task too big for one go: worked on on set days, in steps or for a set time each day. */
+export interface BigTask {
+    /** Seven flags, Monday first: the days to work on it. */
+    days: boolean[];
+    /** Minutes a day; unset = one step a day. */
+    minutes?: number;
+}
+
 /**
- * Something to do once, e.g. "Call dentist". With steps it's a project: the
- * open steps come first, one at a time, then the to-do itself.
+ * Something to do once, e.g. "Call dentist". A small one has a few days
+ * before it must be done. A big one (`big`) is worked on day by day: the open
+ * steps one at a time, then the to-do itself, or a set time each day.
  */
 export interface Todo {
     id: string;
@@ -84,6 +94,14 @@ export interface Todo {
     droppedAt?: number;
     /** How long the to-do itself took, if given. */
     minutes?: number;
+    big?: BigTask;
+    /** Minutes worked by day ("YYYY-MM-DD"), for a big one with a daily time. */
+    log?: Record<string, number>;
+    /** Days a big one was skipped, with the reason typed. */
+    skips?: Record<string, string>;
+    /** A small one's own deadline, picked once after its time ran out. */
+    dueOn?: string;
+    dropReason?: string;
 }
 
 // ---- Day plan ---------------------------------------------------------------
@@ -111,6 +129,12 @@ export interface DayPlan {
     finished: Record<string, number>;
     /** Task ids skipped for the day. */
     skipped: string[];
+    /** Real minutes a routine took, when told (otherwise its usual length). */
+    actual: Record<string, number>;
+    /** Habits started from their call, in minutes after midnight. */
+    started: Record<string, number>;
+    /** Calls already put off once today with "In 30 min". */
+    snoozed: string[];
 }
 
 export interface PlanPrefs {
@@ -172,12 +196,25 @@ export interface BlockEntry {
     limit?: number;
 }
 
+/** A habit you must do (it calls you, skipping costs), or a routine that's only counted for time. */
+export type HabitKind = 'habit' | 'routine';
+
 /**
- * A routine task, e.g. "Workout · 45 min" on Mon, Wed, Fri. It's in the day
- * plan on each of its days, and missing one breaks its streak.
+ * Something repeating on set days. A habit (e.g. "Workout" at 18:00 on Mon,
+ * Wed, Fri) must be done and keeps a streak; a routine (e.g. "Work") just
+ * counts where the time went. Stored together, in "@habits".
  */
 export interface Habit {
     id: string;
+    kind: HabitKind;
+    /** Minutes after midnight: when a habit calls, when a routine usually starts. */
+    time: number;
+    /** A habit's reason, in your own words; shown when it calls. */
+    why?: string;
+    /** Days a habit was skipped, with the reason typed. */
+    skips?: Record<string, string>;
+    /** A one-time routine (an appointment) on this day only; `days` is ignored. */
+    once?: string;
     title: string;
     icon: IconName;
     /** Seven flags, Monday first: which weekdays the task is due. */

@@ -44,6 +44,10 @@ export const KEYS = {
     mapRoutes: '@map_routes',
     mapPrefs: '@map_prefs',
     todos: '@todos',
+    /** When habits and tasks call (written for PlanCalls.kt, which arms them). */
+    planCalls: '@plan_calls',
+    /** Set once habits got a kind and a time (the Today / Tasks / Habits / Time plan). */
+    planKindsMigrated: '@plan_kinds_migrated',
 } as const;
 
 // ---- Cache ------------------------------------------------------------------
@@ -262,3 +266,17 @@ export const isNumber = (v: unknown): v is number => typeof v === 'number' && Nu
 export const numbers = (v: unknown): number[] => (Array.isArray(v) ? v.filter(isNumber) : []);
 export const clampInt = (v: unknown, min: number, max: number, fallback: number) =>
     isNumber(v) ? Math.min(max, Math.max(min, Math.round(v))) : fallback;
+
+/** A { "YYYY-MM-DD": value } map with only valid days and values kept; undefined when empty. */
+export const dayRecord = <T>(v: unknown, valid: (x: unknown) => x is T): Record<string, T> | undefined => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) {
+        return undefined;
+    }
+    const out: Record<string, T> = {};
+    for (const [key, value] of Object.entries(v)) {
+        if (DATE_KEY.test(key) && valid(value)) {
+            out[key] = value;
+        }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+};

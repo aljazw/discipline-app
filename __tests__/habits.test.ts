@@ -18,6 +18,8 @@ const WEEKDAYS = [true, true, true, true, true, false, false];
 
 const habit = (over: Partial<Habit> = {}): Habit => ({
     id: 'h1',
+    kind: 'habit',
+    time: 9 * 60,
     title: 'Workout',
     icon: 'Dumbbell',
     days: EVERY_DAY,

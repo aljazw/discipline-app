@@ -27,6 +27,8 @@ const mockSetItem: jest.Mock = SharedStorage.setItem;
 
 const habit = (id: string): Habit => ({
     id,
+    kind: 'habit',
+    time: 9 * 60,
     title: id,
     icon: 'Target',
     days: [true, true, true, true, true, true, true],

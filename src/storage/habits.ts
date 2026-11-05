@@ -1,9 +1,11 @@
 import { Habit } from '../types/types';
 import { habitIconFrom } from '../constants/habitIcons';
+import { guessKind } from '../utils/habits';
 import {
     DATE_KEY,
     KEYS,
     clampInt,
+    dayRecord,
     isString,
     readList,
     serialized,
@@ -15,13 +17,25 @@ import {
 
 export const DEFAULT_TASK_MINUTES = 15;
 export const MAX_TASK_MINUTES = 12 * 60;
+export const MAX_WHY = 200;
+export const MAX_REASON = 200;
+/** Until a time is set: 9:00. */
+export const DEFAULT_HABIT_TIME = 9 * 60;
+
+const reasonOk = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0;
 
 const toHabit = (v: any): Habit | null => {
     if (!v || !isString(v.id) || !isString(v.title) || !Array.isArray(v.days) || v.days.length !== 7) {
         return null;
     }
+    const link = v.link === 'apnea' || v.link === 'workout' ? v.link : undefined;
     return {
         id: v.id,
+        kind: v.kind === 'habit' || v.kind === 'routine' ? v.kind : guessKind(v.title, link),
+        time: clampInt(v.time, 0, 24 * 60 - 1, DEFAULT_HABIT_TIME),
+        ...(isString(v.why) && v.why.trim() ? { why: v.why.slice(0, MAX_WHY) } : {}),
+        ...(dayRecord(v.skips, reasonOk) ? { skips: dayRecord(v.skips, reasonOk) } : {}),
+        ...(typeof v.once === 'string' && DATE_KEY.test(v.once) ? { once: v.once } : {}),
         title: v.title,
         icon: habitIconFrom(v.icon, v.emoji),
         days: v.days.map((d: unknown) => d === true),
@@ -32,7 +46,7 @@ const toHabit = (v: any): Habit | null => {
                   ...new Set<string>(v.completions.filter((k: unknown) => typeof k === 'string' && DATE_KEY.test(k))),
               ].sort()
             : [],
-        ...(v.link === 'apnea' || v.link === 'workout' ? { link: v.link } : {}),
+        ...(link ? { link } : {}),
     };
 };
 

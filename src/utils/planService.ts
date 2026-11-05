@@ -1,36 +1,36 @@
-/** Loading, changing and notifications for the day plan. Pure plan logic lives in dayPlan.ts. */
+/**
+ * Loading and changing the plan, its calls (PlanCalls.kt opens the app when a
+ * habit is due or tasks are out of time) and its notifications (did a routine
+ * end, is a started habit done). Pure logic is in plan.ts.
+ */
 import notifee, { AndroidImportance, Event, EventType, TriggerType } from '@notifee/react-native';
-import { DayHours, DayPlan, Habit, OneOffTask } from '../types/types';
+import { NativeModules } from 'react-native';
+import { DayHours, DayPlan, Habit, Todo } from '../types/types';
 import { addDays, fromDateKey, newId, toDateKey } from './dates';
-import { markDone } from './habits';
-import {
-    PlanTask,
-    anchorsOf,
-    dayTasks,
-    formatDuration,
-    formatMinutes,
-    laterOrder,
-    minutesNow,
-    motivationFor,
-    orderWith,
-    routineFromLegacy,
-    scheduleDay,
-    timestampOf,
-} from './dayPlan';
+import { isScheduled, markDone, skipHabit } from './habits';
+import { formatDuration, minutesNow, routineFromLegacy, timestampOf } from './dayPlan';
+import { callsFor, dayBounds } from './plan';
+import { newTodo } from './todos';
 import {
     STORAGE_KEYS,
     getDay,
+    getDayHours,
+    getDays,
     getHabits,
     getLegacyPlans,
     getPlanPrefs,
-    getDayHours,
+    getTodos,
     onStorageChange,
     saveHabits,
+    saveTodo,
     updateDay,
     updateHabit,
 } from '../storage';
-import { KEYS, readBool, writeJson } from '../storage/core';
+import { KEYS, parseJson, readBool, readRaw, writeJson } from '../storage/core';
 import { logger } from './logger';
+
+const native: { schedule?: () => Promise<boolean>; takeOpen?: () => Promise<string | null>; dismiss?: () => void } | undefined =
+    NativeModules.PlanCalls;
 
 export interface LoadedDay {
     day: DayPlan;
@@ -43,219 +43,245 @@ export const loadDay = async (date: string): Promise<LoadedDay> => {
     return { day, habits, hours };
 };
 
-const without = (finished: Record<string, number>, id: string): Record<string, number> =>
-    Object.fromEntries(Object.entries(finished).filter(([key]) => key !== id));
+// ---- Changes --------------------------------------------------------------------
 
-/** Checks a task off at `at` (minutes after midnight): its habit too, for a routine task. */
-export const completeTask = async (date: string, task: PlanTask, at: number): Promise<boolean> => {
-    if (task.habit) {
-        const ok = await updateHabit(task.habit.id, h => markDone(h, fromDateKey(date)));
-        if (!ok) {
-            return false;
-        }
-    }
-    return updateDay(date, day => ({
-        ...day,
-        finished: { ...day.finished, [task.id]: at },
-        skipped: day.skipped.filter(id => id !== task.id),
-    }));
-};
-
-export const undoTask = async (date: string, task: PlanTask): Promise<boolean> => {
-    if (task.habit) {
-        const ok = await updateHabit(task.habit.id, h => ({
-            ...h,
-            completions: h.completions.filter(k => k !== date),
-        }));
-        if (!ok) {
-            return false;
-        }
-    }
-    return updateDay(date, day => ({ ...day, finished: without(day.finished, task.id) }));
-};
-
-/** Skips a task for the day (a routine task's streak ends), or brings it back. */
-export const setSkipped = (date: string, taskId: string, skipped: boolean): Promise<boolean> =>
-    updateDay(date, day => ({
-        ...day,
-        skipped: skipped
-            ? [...day.skipped.filter(id => id !== taskId), taskId]
-            : day.skipped.filter(id => id !== taskId),
-    }));
-
-/** "Later": the task swaps places with the next open one. */
-export const moveLater = (date: string, tasks: PlanTask[], taskId: string): Promise<boolean> =>
-    updateDay(date, day => ({ ...day, order: laterOrder(tasks, taskId) }));
-
-/** Saves the day's task order (dragging a task to a new place). */
-export const setOrder = (date: string, ids: string[]): Promise<boolean> =>
-    updateDay(date, day => ({ ...day, order: ids }));
-
-/**
- * Adds or updates a one-off task. A new one goes at the end of the day, or
- * with `upNext` right after the task on now, so it's what comes next.
- */
-export const saveOneOff = async (date: string, task: OneOffTask, upNext = false): Promise<boolean> => {
-    const habits = upNext ? await getHabits() : [];
-    return updateDay(date, day => {
-        if (day.oneOffs.some(t => t.id === task.id)) {
-            return { ...day, oneOffs: day.oneOffs.map(t => (t.id === task.id ? task : t)) };
-        }
-        const added = { ...day, oneOffs: [...day.oneOffs, task] };
-        const tasks = dayTasks(added, habits);
-        const current = tasks.find(t => t.status === 'open' && t.id !== task.id);
-        return upNext && current ? { ...added, order: orderWith(tasks, task.id, current.id) } : added;
-    });
-};
-
-/** A one-off that became a routine task with the same id: it keeps its place and check-off on the day. */
-export const promoteOneOff = (date: string, taskId: string): Promise<boolean> =>
-    updateDay(date, day => ({ ...day, oneOffs: day.oneOffs.filter(t => t.id !== taskId) }));
-
-export const removeOneOff = (date: string, taskId: string): Promise<boolean> =>
-    updateDay(date, day => ({
-        ...day,
-        oneOffs: day.oneOffs.filter(t => t.id !== taskId),
-        order: day.order.filter(id => id !== taskId),
-        skipped: day.skipped.filter(id => id !== taskId),
-        finished: without(day.finished, taskId),
-    }));
-
-/** Remembers when a routine task was checked off elsewhere (e.g. by finishing a workout). */
+/** Remembers when a habit was checked off elsewhere (e.g. by finishing a workout). */
 export const recordFinished = (date: string, taskId: string, at: number): Promise<boolean> =>
     updateDay(date, day => ({ ...day, finished: { ...day.finished, [taskId]: at } }));
 
-// ---- Moving over from time windows ------------------------------------------------
+/** Checks a habit off for the day, or takes it back. */
+export const setHabitDone = async (habitId: string, date: string, done: boolean): Promise<boolean> => {
+    const ok = await updateHabit(habitId, h =>
+        done ? markDone(h, fromDateKey(date)) : { ...h, completions: h.completions.filter(k => k !== date) },
+    );
+    return ok && (!done || (await recordFinished(date, habitId, minutesNow(new Date()))));
+};
+
+export const skipHabitOn = (habitId: string, date: string, reason: string): Promise<boolean> =>
+    updateHabit(habitId, h => skipHabit(h, date, reason));
+
+/** "Start now" on a habit's call: it stops calling, and asks later whether it's done. */
+export const startHabit = (habitId: string, date: string, at: number): Promise<boolean> =>
+    updateDay(date, day => ({ ...day, started: { ...day.started, [habitId]: at } }));
+
+/** "In 30 min" was used for this call today. */
+export const snoozeCall = (date: string, key: string): Promise<boolean> =>
+    updateDay(date, day => ({ ...day, snoozed: [...day.snoozed.filter(k => k !== key), key] }));
+
+/** How long a routine really took that day; null goes back to its usual length. */
+export const setRoutineActual = (date: string, routineId: string, minutes: number | null): Promise<boolean> =>
+    updateDay(date, day => {
+        const rest = Object.fromEntries(Object.entries(day.actual).filter(([id]) => id !== routineId));
+        return { ...day, actual: minutes === null ? rest : { ...rest, [routineId]: Math.max(0, Math.round(minutes)) } };
+    });
+
+/** A routine that didn't happen that day isn't counted. */
+export const setRoutineHappened = (date: string, routineId: string, happened: boolean): Promise<boolean> =>
+    updateDay(date, day => ({
+        ...day,
+        skipped: happened ? day.skipped.filter(id => id !== routineId) : [...day.skipped.filter(id => id !== routineId), routineId],
+    }));
+
+// ---- Moving data over ------------------------------------------------------------
 
 /**
  * Once: turns the old time-window plan into the routine (see
- * routineFromLegacy) and clears the old habit reminders, whose fixed times
- * no longer exist. Never throws.
+ * routineFromLegacy) and clears the old habit reminders. Never throws.
  */
 export const migrateRoutine = async (): Promise<void> => {
     try {
-        if (await readBool(KEYS.routineMigrated)) {
-            return;
-        }
-        const [legacy, habits] = await Promise.all([getLegacyPlans(), getHabits()]);
-        const latest = legacy.filter(p => p.date <= toDateKey(new Date())).pop() ?? legacy[legacy.length - 1];
-        if (latest && latest.blocks.length > 0) {
-            const routine = routineFromLegacy(latest.blocks, habits, new Date(), () => newId('h'));
-            if (!(await saveHabits(routine))) {
-                return;
+        if (!(await readBool(KEYS.routineMigrated))) {
+            const [legacy, habits] = await Promise.all([getLegacyPlans(), getHabits()]);
+            const latest = legacy.filter(p => p.date <= toDateKey(new Date())).pop() ?? legacy[legacy.length - 1];
+            if (latest && latest.blocks.length > 0) {
+                const routine = routineFromLegacy(latest.blocks, habits, new Date(), () => newId('h'));
+                if (!(await saveHabits(routine))) {
+                    return;
+                }
             }
+            await writeJson(KEYS.routineMigrated, true);
+            notifee
+                .getTriggerNotificationIds()
+                .then(ids => notifee.cancelTriggerNotifications(ids.filter(id => id.startsWith('habit:'))))
+                .catch(error => logger.warn('Could not clear old habit reminders', error));
         }
-        await writeJson(KEYS.routineMigrated, true);
-        // Not awaited: app start must never wait on the notification service.
-        notifee
-            .getTriggerNotificationIds()
-            .then(ids => notifee.cancelTriggerNotifications(ids.filter(id => id.startsWith('habit:'))))
-            .catch(error => logger.warn('Could not clear old habit reminders', error));
+        await migratePlanKinds();
     } catch (error) {
-        logger.warn('Could not move the old plan into the routine', error);
+        logger.warn('Could not move the old plan over', error);
     }
 };
 
-// ---- Notifications ------------------------------------------------------------
+/**
+ * Habits once had no time of their own: they followed each other from
+ * wake-up in routine order. Each gets the time it used to start at (on the
+ * first weekday it's on). Day one-offs from today on become tasks (once).
+ */
+export const habitTimesFromOrder = (habits: Habit[], wake: number): Habit[] => {
+    const times = new Map<string, number>();
+    for (let wd = 0; wd < 7; wd++) {
+        let cursor = wake;
+        for (const h of habits) {
+            if (!h.once && h.days[wd]) {
+                if (!times.has(h.id)) {
+                    times.set(h.id, Math.min(cursor, 24 * 60 - 1));
+                }
+                cursor += h.duration;
+            }
+        }
+    }
+    return habits.map(h => ({ ...h, time: times.get(h.id) ?? h.time }));
+};
+
+const migratePlanKinds = async (): Promise<void> => {
+    // Habits without a time of their own: from before, or from an old backup.
+    const raw = parseJson(await readRaw(KEYS.habits));
+    if (Array.isArray(raw) && raw.some(h => h && typeof h.time !== 'number')) {
+        const [habits, hours] = await Promise.all([getHabits(), getDayHours()]);
+        if (!(await saveHabits(habitTimesFromOrder(habits, dayBounds(hours).wake)))) {
+            return;
+        }
+    }
+    if (await readBool(KEYS.planKindsMigrated)) {
+        return;
+    }
+    const today = toDateKey(new Date());
+    for (const day of (await getDays()).filter(d => d.date >= today)) {
+        for (const oneOff of day.oneOffs.filter(t => !(t.id in day.finished))) {
+            await saveTodo(newTodo(oneOff.title, Date.now()));
+        }
+    }
+    await writeJson(KEYS.planKindsMigrated, true);
+};
+
+// ---- Calls -------------------------------------------------------------------------
+
+/** The call that opened the app, if one rang and wasn't shown yet (its id). */
+export const takeOpenCall = async (): Promise<string | null> => {
+    try {
+        const json = await native?.takeOpen?.();
+        return json ? parseCallJson(json) : null;
+    } catch {
+        return null;
+    }
+};
+
+export const parseCallJson = (json: string): string | null => {
+    try {
+        const id = JSON.parse(json)?.id;
+        return typeof id === 'string' ? id : null;
+    } catch {
+        return null;
+    }
+};
+
+/** Clears a decided call's notification. */
+export const dismissCall = () => native?.dismiss?.();
+
+// ---- Notifications ----------------------------------------------------------------
 
 const CHANNEL_ID = 'plan';
 const ID_PREFIX = 'plan:';
-/** "Still going" follow-ups; kept across syncs while their task is still open. */
+/** "Still going" / "Not yet" follow-ups; kept across syncs while still unanswered. */
 const AGAIN_PREFIX = 'plan-again:';
 const AGAIN_AFTER = 15 * 60_000;
 
-const ACTION_DONE = 'plan-done';
+const ACTION_YES = 'plan-yes';
 const ACTION_AGAIN = 'plan-again';
 
-/** The task a notification asks about: buttons check it off, or ask again later. */
+/** What a notification asks: did a routine end, or is a started habit done. */
 interface Asks {
+    kind: 'routine' | 'habit';
     date: string;
-    taskId: string;
+    id: string;
     title: string;
+    /** Minutes after midnight it started. */
+    start: number;
 }
 
-const notification = (id: string, title: string, body: string, asks?: Asks) => ({
+const notification = (id: string, title: string, body: string, asks: Asks) => ({
     id,
     title,
     body,
-    data: asks ? { date: asks.date, taskId: asks.taskId, title: asks.title } : undefined,
+    data: { kind: asks.kind, date: asks.date, id: asks.id, title: asks.title, start: String(asks.start) },
     android: {
         channelId: CHANNEL_ID,
         smallIcon: 'ic_stat_app',
         pressAction: { id: 'default' },
         // No launchActivity: the buttons work without opening the app.
-        actions: asks
-            ? [
-                  { title: `✓ ${asks.title} done`, pressAction: { id: ACTION_DONE } },
-                  { title: 'Still going', pressAction: { id: ACTION_AGAIN } },
-              ]
-            : undefined,
+        actions: [
+            { title: asks.kind === 'routine' ? 'Finished' : `✓ Done`, pressAction: { id: ACTION_YES } },
+            { title: asks.kind === 'routine' ? 'Still going' : 'Not yet', pressAction: { id: ACTION_AGAIN } },
+        ],
     },
 });
 
 const asksOf = (data: Record<string, unknown> | undefined): Asks | null =>
-    data && typeof data.date === 'string' && typeof data.taskId === 'string' && typeof data.title === 'string'
-        ? { date: data.date, taskId: data.taskId, title: data.title }
+    data &&
+    (data.kind === 'routine' || data.kind === 'habit') &&
+    typeof data.date === 'string' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string'
+        ? { kind: data.kind, date: data.date, id: data.id, title: data.title, start: Number(data.start) || 0 }
         : null;
 
 /**
- * Handles the buttons on plan notifications (from notifee's foreground and
- * background events): Done checks the task off now, Still going asks again
- * in 15 minutes. Never throws.
+ * Handles the buttons on plan notifications (foreground and background):
+ * Finished records how long a routine really took, Done checks a habit off,
+ * the other asks again in 15 minutes. Never throws.
  */
 export const handlePlanNotificationEvent = async ({ type, detail }: Event): Promise<void> => {
     const action = detail.pressAction?.id;
     const asks = asksOf(detail.notification?.data);
-    if (type !== EventType.ACTION_PRESS || !asks || (action !== ACTION_DONE && action !== ACTION_AGAIN)) {
+    if (type !== EventType.ACTION_PRESS || !asks || (action !== ACTION_YES && action !== ACTION_AGAIN)) {
         return;
     }
     try {
         if (detail.notification?.id) {
             await notifee.cancelNotification(detail.notification.id);
         }
-        const { day, habits } = await loadDay(asks.date);
-        const task = dayTasks(day, habits).find(t => t.id === asks.taskId);
-        if (!task || task.status !== 'open') {
+        if (action === ACTION_YES) {
+            if (asks.kind === 'routine') {
+                const now = asks.date === toDateKey(new Date()) ? minutesNow(new Date()) : null;
+                if (now !== null && now > asks.start) {
+                    await setRoutineActual(asks.date, asks.id, now - asks.start);
+                }
+            } else {
+                await setHabitDone(asks.id, asks.date, true);
+            }
             return;
         }
-        if (action === ACTION_DONE) {
-            const at = asks.date === toDateKey(new Date()) ? minutesNow(new Date()) : 24 * 60 - 1;
-            await completeTask(asks.date, task, at);
-            await syncPlanReminders();
-        } else {
-            await notifee.createTriggerNotification(
-                notification(
-                    `${AGAIN_PREFIX}${asks.date}:${task.id}`,
-                    `Still on ${task.title}?`,
-                    'Tap Done when it\'s finished, so the rest of the day moves on.',
-                    asks,
-                ),
-                { type: TriggerType.TIMESTAMP, timestamp: Date.now() + AGAIN_AFTER },
-            );
-        }
+        await notifee.createTriggerNotification(
+            notification(
+                `${AGAIN_PREFIX}${asks.date}:${asks.id}`,
+                asks.kind === 'routine' ? `Still at ${asks.title}?` : `${asks.title}: done yet?`,
+                asks.kind === 'routine' ? 'Tap Finished when it ends, so the day’s time is right.' : 'Tap Done when it’s finished.',
+                asks,
+            ),
+            { type: TriggerType.TIMESTAMP, timestamp: Date.now() + AGAIN_AFTER },
+        );
     } catch (error) {
         logger.warn('Could not handle a plan notification', error);
     }
 };
 
-/** Everything the reminders are built from. */
-const REMINDER_INPUTS: string[] = [
+/** Everything calls and notifications are built from. */
+const INPUTS: string[] = [
     STORAGE_KEYS.days,
     STORAGE_KEYS.habits,
+    STORAGE_KEYS.todos,
     STORAGE_KEYS.planPrefs,
     STORAGE_KEYS.dayHours,
     STORAGE_KEYS.sleepSchedule,
 ];
 
 /**
- * Keeps plan notifications in step with the data: any change to the day,
- * the routine, plan settings or day hours reschedules them (once per burst
- * of writes). Call once at startup; returns a function that stops watching.
+ * Keeps calls and notifications in step with the data (once per burst of
+ * writes). Call once at startup; returns a function that stops watching.
  */
 export const watchPlanReminders = (): (() => void) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = onStorageChange(key => {
-        if (REMINDER_INPUTS.includes(key) && !timer) {
+        if (INPUTS.includes(key) && !timer) {
             timer = setTimeout(() => {
                 timer = null;
                 syncPlanReminders();
@@ -273,11 +299,7 @@ export const watchPlanReminders = (): (() => void) => {
 let syncing: Promise<void> | null = null;
 let again = false;
 
-/**
- * Replaces all plan notifications: one when each task of today and tomorrow
- * is estimated to start, so they tell you where you should be by now. Runs
- * one at a time (a call during a sync queues one more run). Never throws.
- */
+/** Rebuilds today's and tomorrow's calls and notifications; one run at a time. Never throws. */
 export const syncPlanReminders = (): Promise<void> => {
     if (syncing) {
         again = true;
@@ -294,70 +316,101 @@ export const syncPlanReminders = (): Promise<void> => {
     return syncing;
 };
 
+/** Whether a follow-up still has something to ask. */
+const stillOpen = (asks: { kind: string; id: string }, day: DayPlan, habits: Habit[]): boolean => {
+    const habit = habits.find(h => h.id === asks.id);
+    if (!habit) {
+        return false;
+    }
+    return asks.kind === 'routine'
+        ? day.actual[habit.id] === undefined && !day.skipped.includes(habit.id)
+        : !habit.completions.includes(day.date);
+};
+
 const syncOnce = async (): Promise<void> => {
     try {
+        const [habits, todos, hours, prefs] = await Promise.all([getHabits(), getTodos(), getDayHours(), getPlanPrefs()]);
+        const now = new Date();
+        const dates = [now, addDays(now, 1)];
+        const days = await Promise.all(dates.map(d => getDay(toDateKey(d))));
+
+        await writeCalls(habits, todos, days, dates, hours, now.getTime());
+
         const pending = await notifee.getTriggerNotificationIds();
         const ids = pending.filter(id => id.startsWith(ID_PREFIX));
         if (ids.length > 0) {
             await notifee.cancelTriggerNotifications(ids);
         }
-        const prefs = await getPlanPrefs();
-        const now = new Date();
-        const today = toDateKey(now);
-        // A "Still going" follow-up stays only while its task is still open today.
-        const followUps = pending.filter(id => id.startsWith(AGAIN_PREFIX));
-        if (followUps.length > 0) {
-            const { day, habits } = await loadDay(today);
-            const keep = new Set(
-                dayTasks(day, habits)
-                    .filter(t => t.status === 'open')
-                    .map(t => `${AGAIN_PREFIX}${today}:${t.id}`),
-            );
-            const stale = followUps.filter(id => !prefs.reminders || !keep.has(id));
-            if (stale.length > 0) {
-                await notifee.cancelTriggerNotifications(stale);
-            }
+        const today = days[0];
+        const stale = pending
+            .filter(id => id.startsWith(AGAIN_PREFIX))
+            .filter(id => {
+                const [, date, habitId] = id.split(':');
+                const habit = habits.find(h => h.id === habitId);
+                return (
+                    !prefs.reminders ||
+                    date !== today.date ||
+                    !habit ||
+                    !stillOpen({ kind: habit.kind, id: habitId }, today, habits)
+                );
+            });
+        if (stale.length > 0) {
+            await notifee.cancelTriggerNotifications(stale);
         }
         if (!prefs.reminders) {
             return;
         }
         await notifee.createChannel({ id: CHANNEL_ID, name: 'Day plan', importance: AndroidImportance.HIGH });
 
-        for (const date of [today, toDateKey(addDays(now, 1))]) {
-            const { day, habits, hours } = await loadDay(date);
-            const tasks = dayTasks(day, habits);
-            const { slots } = scheduleDay(tasks, anchorsOf(hours), date === today ? minutesNow(now) : null);
-            const open = slots.filter(s => s.task.status === 'open');
-            await Promise.all(
-                open.map((slot, i) => {
-                    const at = timestampOf(date, slot.start);
-                    if (at <= now.getTime()) {
-                        return Promise.resolve();
-                    }
-                    const previous = i > 0 ? open[i - 1].task : null;
-                    const after = open[i + 1];
-                    const title = previous
-                        ? `Time for ${slot.task.title} · ${formatDuration(slot.task.duration)}`
-                        : `First up: ${slot.task.title} · ${formatDuration(slot.task.duration)}`;
-                    const body = [
-                        previous ? `Wrap up ${previous.title} and move on.` : motivationFor(date + slot.task.id),
-                        after ? `Then ${after.task.title} around ${formatMinutes(after.start)}.` : null,
-                    ]
-                        .filter(Boolean)
-                        .join('\n');
-                    return notifee.createTriggerNotification(
+        const jobs: Promise<unknown>[] = [];
+        dates.forEach((date, i) => {
+            const day = days[i];
+            for (const h of habits) {
+                if (!isScheduled(h, date) || h.createdAt > day.date) {
+                    continue;
+                }
+                const routine = h.kind === 'routine';
+                const start = routine ? h.time : day.started[h.id];
+                if (start === undefined || !stillOpen({ kind: h.kind, id: h.id }, day, habits)) {
+                    continue;
+                }
+                const at = timestampOf(day.date, start + h.duration);
+                if (at <= now.getTime()) {
+                    continue;
+                }
+                const asks: Asks = { kind: h.kind, date: day.date, id: h.id, title: h.title, start };
+                jobs.push(
+                    notifee.createTriggerNotification(
                         notification(
-                            `${ID_PREFIX}${date}:${slot.task.id}`,
-                            title,
-                            body,
-                            previous ? { date, taskId: previous.id, title: previous.title } : undefined,
+                            `${ID_PREFIX}${day.date}:${h.id}`,
+                            routine ? `${h.title}: finished?` : `${h.title}: done?`,
+                            routine
+                                ? `Tap Finished when it ends. If you don’t, the usual ${formatDuration(h.duration)} is counted.`
+                                : 'You started it. Tap Done when it’s finished.',
+                            asks,
                         ),
                         { type: TriggerType.TIMESTAMP, timestamp: at },
-                    );
-                }),
-            );
-        }
+                    ),
+                );
+            }
+        });
+        await Promise.all(jobs);
     } catch (error) {
         logger.warn('Could not schedule plan reminders', error);
+    }
+};
+
+/** Today's and tomorrow's calls, handed to PlanCalls.kt to ring. */
+const writeCalls = async (
+    habits: Habit[],
+    todos: Todo[],
+    days: DayPlan[],
+    dates: Date[],
+    hours: DayHours,
+    now: number,
+): Promise<void> => {
+    const calls = dates.flatMap((date, i) => callsFor(habits, todos, days[i], date, hours, now));
+    if (await writeJson(KEYS.planCalls, calls)) {
+        await native?.schedule?.();
     }
 };

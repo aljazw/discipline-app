@@ -329,7 +329,7 @@ class BlockAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Sleep time covers everything (Settings included) except the essentials.
+        // Sleep time covers everything except the essentials and Settings (the settings guard still runs there).
         if (shouldCoverForSleep(packageName, event)) {
             stopTiming()
             if (System.currentTimeMillis() - lastSleepTime > SLEEP_DEBOUNCE) {
@@ -506,6 +506,8 @@ class BlockAccessibilityService : AccessibilityService() {
     private fun shouldCoverForSleep(packageName: String, event: AccessibilityEvent): Boolean {
         val schedule = sleepSchedule ?: return false
         if (!SleepSchedule.isSleepTimeNow(sharedPref, schedule)) return false
+        // Settings stays usable (Wi-Fi, Bluetooth, alarms); the settings guard still protects the app there.
+        if (isSettingsPackage(packageName)) return false
         if (packageName == applicationContext.packageName) {
             // Our own app is covered too (otherwise sleep time could just be switched
             // off there), but not our native pages: the sleep page, guard, block page.

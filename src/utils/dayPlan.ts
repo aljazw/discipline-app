@@ -6,7 +6,7 @@
 import { DayPlan, Habit, SleepSchedule } from '../types/types';
 import type { IconName } from '../components/Icon';
 import { fromDateKey, newId, toDateKey } from './dates';
-import { isDoneOn, isScheduled } from './habits';
+import { guessKind, isDoneOn, isScheduled } from './habits';
 import type { LegacyBlock } from '../storage/dayPlans';
 
 export const DAY_MINUTES = 24 * 60;
@@ -266,7 +266,14 @@ const STARTER: { title: string; icon: IconName; duration: number; days: boolean[
 
 /** A typical routine to start from; everything is editable. */
 export const starterRoutine = (today: Date, makeId: () => string): Habit[] =>
-    STARTER.map(t => ({ ...t, id: makeId(), createdAt: toDateKey(today), completions: [] }));
+    STARTER.map(t => ({
+        ...t,
+        id: makeId(),
+        kind: guessKind(t.title),
+        time: 7 * 60,
+        createdAt: toDateKey(today),
+        completions: [],
+    }));
 
 /**
  * Moves the old time-window plan into the routine: the latest plan's blocks,
@@ -297,6 +304,8 @@ export const routineFromLegacy = (
         }
         routine.push({
             id: makeId(),
+            kind: guessKind(block.title),
+            time: Math.max(0, Math.min(DAY_MINUTES - 1, usual(block))),
             title: block.title,
             icon: block.icon,
             duration,

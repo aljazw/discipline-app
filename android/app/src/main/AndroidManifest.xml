@@ -201,6 +201,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- Plan calls: a due habit or tasks out of time open the app -->
+        <receiver
+            android:name=".plan.PlanCallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Map: records a GPS track with the screen off or the app closed -->
         <service
             android:name=".map.TrackService"

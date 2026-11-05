@@ -11,7 +11,29 @@ const MAX_DAYS = 60;
 
 const byDate = (a: DayPlan, b: DayPlan) => a.date.localeCompare(b.date);
 
-export const emptyDay = (date: string): DayPlan => ({ date, order: [], oneOffs: [], finished: {}, skipped: [] });
+export const emptyDay = (date: string): DayPlan => ({
+    date,
+    order: [],
+    oneOffs: [],
+    finished: {},
+    skipped: [],
+    actual: {},
+    started: {},
+    snoozed: [],
+});
+
+/** { id: minutes } with whole minutes in `min`..`max` only. */
+const minutesById = (v: unknown, min: number, max: number): Record<string, number> => {
+    const out: Record<string, number> = {};
+    if (v && typeof v === 'object') {
+        for (const [id, m] of Object.entries(v)) {
+            if (isNumber(m)) {
+                out[id] = clampInt(m, min, max, min);
+            }
+        }
+    }
+    return out;
+};
 
 const toOneOff = (v: any): OneOffTask | null =>
     v && isString(v.id) && isString(v.title)
@@ -43,6 +65,9 @@ const toDayPlan = (v: any): DayPlan | null => {
             : [],
         finished,
         skipped: Array.isArray(v.skipped) ? v.skipped.filter(isString) : [],
+        actual: minutesById(v.actual, 0, 24 * 60),
+        started: minutesById(v.started, 0, 24 * 60 - 1),
+        snoozed: Array.isArray(v.snoozed) ? v.snoozed.filter(isString) : [],
     };
 };
 

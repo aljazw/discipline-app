@@ -13,6 +13,7 @@ import com.disciplineapp.map.MapModule
 import com.disciplineapp.music.MusicModule
 import com.disciplineapp.notes.NoteCryptoModule
 import com.disciplineapp.video.PromiseVideoModule
+import com.disciplineapp.plan.PlanCallsModule
 
 /** Registers every native module of the app. Add new modules to this list. */
 class AppPackage : ReactPackage {
@@ -32,6 +33,7 @@ class AppPackage : ReactPackage {
             MusicModule(reactContext),
             WakeAlarmModule(reactContext),
             PromiseVideoModule(reactContext),
+            PlanCallsModule(reactContext),
             NoteCryptoModule(reactContext),
             MapModule(reactContext),
         )

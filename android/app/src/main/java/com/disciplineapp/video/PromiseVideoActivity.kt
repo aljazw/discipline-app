@@ -31,9 +31,13 @@ class PromiseVideoActivity : Activity() {
 
         val player = VideoView(this).apply {
             setVideoURI(Uri.parse("android.resource://$packageName/${R.raw.keep_your_word}"))
-            setOnCompletionListener { finish() }
+            setOnCompletionListener {
+                setResult(RESULT_OK)
+                finish()
+            }
             // A broken player must not leave the user stuck on a black screen.
             setOnErrorListener { _, _, _ ->
+                setResult(RESULT_OK)
                 finish()
                 true
             }

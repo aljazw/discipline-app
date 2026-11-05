@@ -24,6 +24,8 @@ const ANCHORS = { wake: 7 * 60, bed: 23 * 60 };
 
 const habit = (id: string, duration: number, over: Partial<Habit> = {}): Habit => ({
     id,
+    kind: 'habit',
+    time: 9 * 60,
     title: id,
     icon: 'Target',
     days: EVERY_DAY,
@@ -38,6 +40,9 @@ const day = (over: Partial<DayPlan> = {}): DayPlan => ({
     order: [],
     oneOffs: [],
     finished: {},
+    actual: {},
+    started: {},
+    snoozed: [],
     skipped: [],
     ...over,
 });

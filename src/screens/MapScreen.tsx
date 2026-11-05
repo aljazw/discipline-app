@@ -167,7 +167,6 @@ const MapScreen: React.FC = () => {
     const [shownTrack, setShownTrack] = useState<Track | null>(null);
 
     const [fix, setFix] = useState<Fix | null>(null);
-    const [compass, setCompass] = useState<number | null>(null);
     const [follow, setFollow] = useState<Follow>('off');
     const [mapHeading, setMapHeading] = useState(0);
     const [visible, setVisible] = useState<{ ne: LngLat; sw: LngLat } | null>(null);
@@ -226,7 +225,6 @@ const MapScreen: React.FC = () => {
         useCallback(() => {
             loadPlaces();
             loadFiles();
-            return mapNative.watchCompass(setCompass);
         }, [loadPlaces, loadFiles]),
     );
 
@@ -359,7 +357,6 @@ const MapScreen: React.FC = () => {
     }, []);
 
     const moving = !!fix && fix.course !== null;
-    const heading = moving ? fix!.course : compass;
 
     const cycleFollow = async () => {
         if (!(await requestLocation())) {
@@ -986,9 +983,8 @@ const MapScreen: React.FC = () => {
                 <View>
                     <MapButton icon="Layers" label="Map layers" onPress={() => setLayersOpen(true)} />
                     <MapButton
-                        icon="Satellite"
-                        label={prefs.base === SATELLITE_BASE ? 'Back to the map' : 'Satellite view'}
-                        active={prefs.base === SATELLITE_BASE}
+                        icon={prefs.base === SATELLITE_BASE ? 'Map' : 'Satellite'}
+                        label={prefs.base === SATELLITE_BASE ? 'Back to your map' : 'Satellite view'}
                         onPress={() => savePrefs(toggleSatellite(prefs))}
                         style={styles.stacked}
                     />
@@ -1018,10 +1014,7 @@ const MapScreen: React.FC = () => {
                         selectionPanel ?? (
                             <InfoPanel
                                 fix={fix}
-                                heading={heading}
-                                headingIsCourse={moving}
                                 units={units}
-                                coords={coordFormat}
                                 recording={recording.state}
                                 onRecord={startRecording}
                                 onPauseResume={pauseResume}

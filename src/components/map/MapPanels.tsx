@@ -2,16 +2,15 @@
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { shapes, spacing } from '../../theme';
-import { CoordFormat, MapUnits } from '../../types/types';
+import { MapUnits } from '../../types/types';
 import IconButton from '../IconButton';
 import Icon, { IconName } from '../Icon';
 import Button from '../Button';
 import { ThemedText } from '../ThemedText';
-import { PanelAction, Stat } from './mapUi';
+import { PanelAction } from './mapUi';
 import {
     distanceParts,
     formatBearing,
-    formatCoords,
     formatDistance,
     formatDuration,
     normalize,
@@ -117,13 +116,10 @@ export interface Fix {
     accuracy: number | null;
 }
 
-/** Speed, heading and position, the record control, and the map's tools. */
+/** A slim bar along the bottom: the map's tools, and the recording controls while recording. */
 export const InfoPanel: React.FC<{
     fix: Fix | null;
-    heading: number | null;
-    headingIsCourse: boolean;
     units: MapUnits;
-    coords: CoordFormat;
     recording: RecordingState;
     onRecord: () => void;
     onPauseResume: () => void;
@@ -132,47 +128,18 @@ export const InfoPanel: React.FC<{
     onMeasure: () => void;
     onSaved: () => void;
     style?: StyleProp<ViewStyle>;
-}> = ({
-    fix,
-    heading,
-    headingIsCourse,
-    units,
-    coords,
-    recording,
-    onRecord,
-    onPauseResume,
-    onStopRecording,
-    onRoute,
-    onMeasure,
-    onSaved,
-    style,
-}) => {
+}> = ({ fix, units, recording, onRecord, onPauseResume, onStopRecording, onRoute, onMeasure, onSaved, style }) => {
     const { colors } = useTheme().theme;
-    const speed = speedParts(fix?.speed ?? 0, units);
     const live = recording.status !== 'idle';
-    const dist = distanceParts(recording.distance, units);
+    const speed = speedParts(fix?.speed ?? 0, units);
     return (
-        <Panel style={style}>
-            <View style={styles.stats}>
-                <Stat label="Speed" value={fix ? speed.value : '–'} unit={speed.unit} />
-                <Stat
-                    label={headingIsCourse ? 'Course' : 'Heading'}
-                    value={heading === null ? '–' : `${Math.round(normalize(heading)) % 360}°`}
-                    unit={heading === null ? undefined : formatBearing(heading).split(' ')[1]}
-                />
-                {live && <Stat label="Distance" value={dist.value} unit={dist.unit} />}
-            </View>
-            <ThemedText size="small" color="muted" tabular numberOfLines={1} style={styles.coords}>
-                {fix
-                    ? `${formatCoords(fix.pos[1], fix.pos[0], coords)}${fix.accuracy ? `  ±${Math.round(fix.accuracy)} m` : ''}`
-                    : 'Waiting for GPS…'}
-            </ThemedText>
-
+        <Panel style={[styles.bar, style]}>
             {live && (
-                <View style={[styles.recording, { borderColor: colors.border }]}>
+                <View style={[styles.recording, { borderBottomColor: colors.border }]}>
                     <View style={[styles.dot, { backgroundColor: recording.status === 'paused' ? colors.muted : colors.primaryRed }]} />
-                    <ThemedText size="small" weight="medium" style={styles.flex} tabular>
-                        {recording.status === 'paused' ? 'Paused' : 'Recording'} · {formatDuration(recording.elapsedMs)}
+                    <ThemedText size="small" weight="medium" style={styles.flex} tabular numberOfLines={1}>
+                        {formatDuration(recording.elapsedMs)} · {formatDistance(recording.distance, units)}
+                        {fix ? ` · ${speed.value} ${speed.unit}` : ''}
                     </ThemedText>
                     <Button
                         label={recording.status === 'paused' ? 'Resume' : 'Pause'}
@@ -183,8 +150,7 @@ export const InfoPanel: React.FC<{
                     <Button label="Stop" variant="danger" compact onPress={onStopRecording} style={styles.stopButton} />
                 </View>
             )}
-
-            <View style={[styles.actions, { borderTopColor: colors.border }]}>
+            <View style={styles.barActions}>
                 {!live && <PanelAction icon="Record" label="Record" tint={colors.primaryRed} onPress={onRecord} />}
                 <PanelAction icon="Route" label="Plan route" onPress={onRoute} />
                 <PanelAction icon="Ruler" label="Measure" onPress={onMeasure} />
@@ -315,12 +281,20 @@ const styles = StyleSheet.create({
     coords: {
         marginTop: spacing.xs + 2,
     },
+    barActions: {
+        flexDirection: 'row',
+    },
+    bar: {
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
+    },
     recording: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: spacing.sm,
-        paddingTop: spacing.sm,
-        borderTopWidth: StyleSheet.hairlineWidth,
+        paddingHorizontal: spacing.xs,
+        paddingBottom: spacing.xs + 2,
+        marginBottom: spacing.xs,
+        borderBottomWidth: StyleSheet.hairlineWidth,
     },
     dot: {
         width: 8,
@@ -330,13 +304,6 @@ const styles = StyleSheet.create({
     },
     stopButton: {
         marginLeft: spacing.sm,
-    },
-    actions: {
-        flexDirection: 'row',
-        marginTop: spacing.sm,
-        paddingTop: spacing.xs,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        marginHorizontal: -spacing.sm,
     },
     actionsFlat: {
         flexDirection: 'row',

@@ -21,3 +21,18 @@ export const playPromiseVideoOncePerDay = async (): Promise<void> => {
         logger.warn('Could not play the promise video', error);
     }
 };
+
+const player: { playToEnd?: () => Promise<boolean> } | undefined = NativeModules.PromiseVideo;
+
+/**
+ * Plays the "keep your word" video; resolves true once it was watched to the
+ * end. Without the native player (tests) it counts as watched.
+ */
+export const watchVideoToEnd = async (): Promise<boolean> => {
+    try {
+        return player?.playToEnd ? await player.playToEnd() : true;
+    } catch (error) {
+        logger.warn('Could not play the video', error);
+        return false;
+    }
+};

@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { spacing } from '../theme';
 import { currentStreak, recentDays } from '../utils/habits';
 import { describeHabitDays } from '../utils/habitText';
-import { formatDuration } from '../utils/dayPlan';
+import { formatDuration, formatMinutes } from '../utils/dayPlan';
 import { ThemedText } from './ThemedText';
 import Card from './Card';
 import IconButton from './IconButton';
@@ -19,7 +19,7 @@ interface HabitCardProps {
     reordering?: boolean;
 }
 
-/** One routine task: icon, title, days, length, streak and the last 7 days. */
+/** One habit: icon, title, time, length, days, streak and the last 7 days. */
 const HabitCard: React.FC<HabitCardProps> = ({ habit, onOpen, onMoveUp, onMoveDown, reordering }) => {
     const { colors } = useTheme().theme;
     const streak = currentStreak(habit);
@@ -33,7 +33,7 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, onOpen, onMoveUp, onMoveDo
                     {habit.title}
                 </ThemedText>
                 <ThemedText size="small" color="muted" numberOfLines={1} tabular>
-                    {formatDuration(habit.duration)} · {describeHabitDays(habit.days)}
+                    {formatMinutes(habit.time)} · {formatDuration(habit.duration)} · {describeHabitDays(habit.days)}
                     {streak > 0 ? ` · ${streak}-day streak` : ''}
                 </ThemedText>
                 {!reordering && (

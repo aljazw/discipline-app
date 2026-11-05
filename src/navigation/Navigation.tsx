@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { DeviceEventEmitter } from 'react-native';
+import notifee from '@notifee/react-native';
 import { DarkTheme, DefaultTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import BottomTabNavigator from './BottomTabNavigator';
 import BlockScreen from '../screens/BlockScreen';
 import ScheduleScreen from '../screens/ScheduleScreen';
 import TaskEditorScreen from '../screens/TaskEditorScreen';
+import TodoEditorScreen from '../screens/TodoEditorScreen';
+import PlanCallScreen from '../screens/PlanCallScreen';
 import ApneaTableScreen from '../screens/ApneaTableScreen';
 import ApneaSessionScreen from '../screens/ApneaSessionScreen';
 import ApneaHistoryScreen from '../screens/ApneaHistoryScreen';
@@ -21,37 +25,30 @@ import NotesScreen from '../screens/NotesScreen';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import MapScreen from '../screens/MapScreen';
 import MapLibraryScreen from '../screens/MapLibraryScreen';
-import PlanNudge from '../components/PlanNudge';
 import { RootStackParamList } from '../types/types';
 import { useAppForeground } from '../hooks/useAppForeground';
 import { useTheme } from '../context/ThemeContext';
 import { apneaSession } from '../utils/apneaSession';
 import { getWorkoutSession } from '../storage';
 import { watchNotesLock } from '../utils/notes';
+import {
+    handlePlanNotificationEvent,
+    syncPlanReminders,
+    takeOpenCall,
+    watchPlanReminders,
+} from '../utils/planService';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-/** Screens where a plan pop-up would get in the way: training and editing. */
-const NO_NUDGE: string[] = [
-    'ApneaSession',
-    'WorkoutSession',
-    'ApneaTable',
-    'TaskEditor',
-    'WorkoutEditor',
-    'Schedule',
-    'NoteEditor',
-    'Map',
-];
-
-const canNudge = () => {
-    const route = navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined;
-    return !!route && !NO_NUDGE.includes(route);
-};
-
-const openPlan = () => {
-    if (navigationRef.isReady()) {
-        navigationRef.navigate('BottomTabs', { screen: 'Habits', params: { view: 'today' } });
+/** Shows the call that rang (a habit due, tasks out of time), if one is waiting. */
+const showPendingCall = async () => {
+    if (!navigationRef.isReady()) {
+        return;
+    }
+    const callId = await takeOpenCall();
+    if (callId) {
+        navigationRef.navigate('PlanCall', { callId });
     }
 };
 
@@ -99,11 +96,24 @@ const Navigation: React.FC = () => {
             checking.current = false;
         }
     }, []);
-    useAppForeground(resumeActiveSession);
+    const onForeground = useCallback(async () => {
+        await resumeActiveSession();
+        await showPendingCall();
+        // A new day (or time passed) changes which calls are still to come.
+        syncPlanReminders();
+    }, [resumeActiveSession]);
+    useAppForeground(onForeground);
     useEffect(watchNotesLock, []);
+    useEffect(watchPlanReminders, []);
+    useEffect(() => notifee.onForegroundEvent(handlePlanNotificationEvent), []);
+    // A call rang while the app is open.
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener('PlanCall', () => showPendingCall());
+        return () => sub.remove();
+    }, []);
 
     return (
-        <NavigationContainer ref={navigationRef} theme={navTheme} onReady={resumeActiveSession}>
+        <NavigationContainer ref={navigationRef} theme={navTheme} onReady={onForeground}>
             <Stack.Navigator
                 initialRouteName="BottomTabs"
                 screenOptions={{
@@ -122,6 +132,12 @@ const Navigation: React.FC = () => {
                 <Stack.Screen name="AddSite" component={BlockScreen} />
                 <Stack.Screen name="Schedule" component={ScheduleScreen} />
                 <Stack.Screen name="TaskEditor" component={TaskEditorScreen} />
+                <Stack.Screen name="TodoEditor" component={TodoEditorScreen} />
+                <Stack.Screen
+                    name="PlanCall"
+                    component={PlanCallScreen}
+                    options={{ gestureEnabled: false, animation: 'fade' }}
+                />
                 <Stack.Screen name="ApneaTable" component={ApneaTableScreen} />
                 <Stack.Screen name="ApneaSession" component={ApneaSessionScreen} options={{ gestureEnabled: false }} />
                 <Stack.Screen name="Apnea" component={BreatheScreen} />
@@ -144,7 +160,6 @@ const Navigation: React.FC = () => {
                     options={{ gestureEnabled: false }}
                 />
             </Stack.Navigator>
-            <PlanNudge canShow={canNudge} onOpenPlan={openPlan} />
         </NavigationContainer>
     );
 };
