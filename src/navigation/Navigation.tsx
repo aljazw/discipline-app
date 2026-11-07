@@ -25,6 +25,7 @@ import NotesScreen from '../screens/NotesScreen';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import MapScreen from '../screens/MapScreen';
 import MapLibraryScreen from '../screens/MapLibraryScreen';
+import SurveyScreen from '../screens/SurveyScreen';
 import { RootStackParamList } from '../types/types';
 import { useAppForeground } from '../hooks/useAppForeground';
 import { useTheme } from '../context/ThemeContext';
@@ -154,6 +155,7 @@ const Navigation: React.FC = () => {
                 {/* Panning the map from the left edge must not swipe the screen away. */}
                 <Stack.Screen name="Map" component={MapScreen} options={{ gestureEnabled: false }} />
                 <Stack.Screen name="MapLibrary" component={MapLibraryScreen} />
+                <Stack.Screen name="Survey" component={SurveyScreen} />
                 <Stack.Screen
                     name="WorkoutSession"
                     component={WorkoutSessionScreen}

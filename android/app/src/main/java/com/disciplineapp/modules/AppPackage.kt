@@ -14,6 +14,7 @@ import com.disciplineapp.music.MusicModule
 import com.disciplineapp.notes.NoteCryptoModule
 import com.disciplineapp.video.PromiseVideoModule
 import com.disciplineapp.plan.PlanCallsModule
+import com.disciplineapp.survey.SurveyModule
 
 /** Registers every native module of the app. Add new modules to this list. */
 class AppPackage : ReactPackage {
@@ -36,6 +37,7 @@ class AppPackage : ReactPackage {
             PlanCallsModule(reactContext),
             NoteCryptoModule(reactContext),
             MapModule(reactContext),
+            SurveyModule(reactContext),
         )
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()

@@ -41,6 +41,7 @@ import { formatCoords, formatDistance, formatDuration, pathLength } from '../uti
 import { buildGpx, gpxFileName } from '../utils/gpx';
 import { fileBaseId } from '../utils/mapStyle';
 import { newId, shortDate } from '../utils/dates';
+import { SurveySummary, buildSurveyGpx, buildSurveyJson, formatClock, surveyFileName, surveyNative } from '../utils/survey';
 import { logger } from '../utils/logger';
 
 interface Row {
@@ -59,6 +60,7 @@ const TABS: { value: MapLibraryTab; label: string }[] = [
     { value: 'marks', label: 'Places' },
     { value: 'routes', label: 'Routes' },
     { value: 'tracks', label: 'Tracks' },
+    { value: 'surveys', label: 'Surveys' },
     { value: 'maps', label: 'Maps' },
 ];
 
@@ -87,6 +89,8 @@ const MapLibraryScreen: React.FC = () => {
     const [marks, setMarks] = useState<MapMark[]>([]);
     const [routes, setRoutes] = useState<MapRoute[]>([]);
     const [tracks, setTracks] = useState<TrackSummary[]>([]);
+    const [surveys, setSurveys] = useState<SurveySummary[]>([]);
+    const [surveyMenu, setSurveyMenu] = useState<SurveySummary | null>(null);
     const [files, setFiles] = useState<MapFile[]>([]);
     const [prefs, setPrefs] = useState<MapPrefs>(DEFAULT_MAP_PREFS);
     const [folder, setFolder] = useState('');
@@ -110,6 +114,9 @@ const MapLibraryScreen: React.FC = () => {
             setFiles(f);
             setPrefs(p);
             mapNative.mapsFolder().then(setFolder).catch(() => undefined);
+            if (surveyNative.available) {
+                surveyNative.list().then(setSurveys).catch(e => logger.warn('Could not load surveys', e));
+            }
         } catch (error) {
             logger.warn('Could not load map library', error);
         } finally {
@@ -191,6 +198,23 @@ const MapLibraryScreen: React.FC = () => {
         }
     };
 
+    const exportSurvey = async (summary: SurveySummary, kind: 'gpx' | 'json') => {
+        setSurveyMenu(null);
+        try {
+            const survey = await surveyNative.get(summary.id);
+            if (!survey) {
+                throw new Error('The survey file could not be read.');
+            }
+            await mapNative.saveFile(
+                surveyFileName(survey.name, kind),
+                kind === 'gpx' ? 'application/gpx+xml' : 'application/json',
+                kind === 'gpx' ? buildSurveyGpx(survey) : buildSurveyJson(survey),
+            );
+        } catch (e: any) {
+            setNotice({ title: 'Could not export', message: e?.message ?? 'The file could not be saved.' });
+        }
+    };
+
     const importMap = async () => {
         setBusy(true);
         try {
@@ -246,6 +270,21 @@ const MapLibraryScreen: React.FC = () => {
                       ask('Delete this track?', `“${t.name}” will be removed from this phone.`, () => mapNative.deleteTrack(t.id)),
                   trailing: { icon: 'Download', label: `Export ${t.name}`, onPress: () => exportTrack(t) },
               }))
+            : tab === 'surveys'
+            ? surveys.map(sv => ({
+                  key: sv.id,
+                  icon: 'Video',
+                  title: sv.name,
+                  detail: `${shortDate(new Date(sv.startedAt))} · ${formatClock(sv.activeMovementMs)} · ${sv.pointCount} points${
+                      sv.markerCount ? ` · ${sv.markerCount} marker${sv.markerCount === 1 ? '' : 's'}` : ''
+                  }`,
+                  onPress: () => setSurveyMenu(sv),
+                  onLongPress: () =>
+                      ask('Delete this survey?', `“${sv.name}” and its GPS track will be removed from this phone.`, () =>
+                          surveyNative.remove(sv.id),
+                      ),
+                  trailing: { icon: 'Download', label: `Export ${sv.name}`, onPress: () => setSurveyMenu(sv) },
+              }))
             : files.map(f => ({
                   key: f.id,
                   icon: 'Layers',
@@ -266,6 +305,7 @@ const MapLibraryScreen: React.FC = () => {
         marks: { icon: 'Pin' as IconName, title: 'No places yet', text: 'Hold your finger on the map to drop a pin, then save it. Or import a GPX, KML or GeoJSON file.' },
         routes: { icon: 'Route' as IconName, title: 'No routes yet', text: 'Tap Plan route on the map and tap the points to pass, in order.' },
         tracks: { icon: 'Activity' as IconName, title: 'No tracks yet', text: 'Tap Record on the map. It keeps recording with the screen off.' },
+        surveys: { icon: 'Video' as IconName, title: 'No surveys yet', text: 'Record a Water Wolf camera survey from Tools → Water Wolf.' },
         maps: { icon: 'Layers' as IconName, title: 'No offline maps', text: 'Add an MBTiles or PMTiles file, such as a sea chart, to use the map without internet.' },
     }[tab];
 
@@ -320,14 +360,14 @@ const MapLibraryScreen: React.FC = () => {
             </View>
         ) : rows.length > 0 ? (
             <ThemedText size="small" color="muted" style={[styles.hint, styles.footer]}>
-                Tap to show on the map. Hold to delete.
+                {tab === 'surveys' ? 'Tap to export. Hold to delete.' : 'Tap to show on the map. Hold to delete.'}
             </ThemedText>
         ) : null;
 
     return (
         <BaseScreen
             title="Saved"
-            subtitle="Places, routes, tracks and maps"
+            subtitle="Places, routes, tracks, surveys and maps"
             headerLeft={<BackButton />}
             headerRight={
                 <View style={styles.headerButtons}>
@@ -389,6 +429,25 @@ const MapLibraryScreen: React.FC = () => {
                     },
                     true,
                 )}
+            />
+            <Dialog
+                visible={!!surveyMenu}
+                onClose={() => setSurveyMenu(null)}
+                title={surveyMenu?.name ?? ''}
+                message={
+                    surveyMenu
+                        ? `Moving ${formatClock(surveyMenu.activeMovementMs)} of ${formatClock(surveyMenu.totalElapsedMs)} since the camera started · ${formatDistance(surveyMenu.distance, units)}. Export the GPS track as GPX, or everything (times, events, markers, points) as JSON.`
+                        : undefined
+                }
+                icon="Download"
+                actions={
+                    surveyMenu
+                        ? [
+                              { label: 'GPX', variant: 'secondary', onPress: () => exportSurvey(surveyMenu, 'gpx') },
+                              { label: 'JSON', onPress: () => exportSurvey(surveyMenu, 'json') },
+                          ]
+                        : undefined
+                }
             />
             <Dialog visible={!!notice} onClose={() => setNotice(null)} title={notice?.title ?? ''} message={notice?.message} />
         </BaseScreen>

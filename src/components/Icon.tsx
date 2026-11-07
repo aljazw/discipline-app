@@ -113,6 +113,8 @@ import {
     Share2,
     Tent,
     Undo2,
+    Video,
+    Ship,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
@@ -240,6 +242,8 @@ const ICONS = {
     Bike: Bike,
     Mountain: Mountain,
     Satellite: Satellite,
+    Video: Video,
+    Ship: Ship,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

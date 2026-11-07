@@ -5,10 +5,13 @@
 import { APP_NAME } from '../constants/brand';
 import { MapMark, MapRoute, Track } from '../types/types';
 
-const escape = (s: string) =>
+export const escapeXml = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-const n = (v: number, digits = 7) => Number(v.toFixed(digits)).toString();
+export const gpxNumber = (v: number, digits = 7) => Number(v.toFixed(digits)).toString();
+
+const escape = escapeXml;
+const n = gpxNumber;
 
 const SYMBOLS: Record<MapMark['kind'], string> = {
     spot: 'Waypoint',

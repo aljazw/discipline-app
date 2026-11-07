@@ -56,6 +56,12 @@ const ToolsScreen: React.FC = () => {
                             onPress={() => navigation.navigate('Map')}
                         />
                         <ListRow
+                            icon="Video"
+                            title="Water Wolf"
+                            description="Record an underwater camera survey with its GPS track"
+                            onPress={() => navigation.navigate('Survey')}
+                        />
+                        <ListRow
                             icon="Notes"
                             title="Notes"
                             description={notesText}

@@ -21,6 +21,8 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.disciplineapp.R
+import com.disciplineapp.survey.SurveyAction
+import com.disciplineapp.survey.SurveySession
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -34,19 +36,31 @@ import java.io.File
  * Every accepted point is appended to tracks/current.jsonl right away, and
  * the summary goes to SharedPreferences, so if Android kills the process the
  * restarted service (START_STICKY) carries on with nothing lost.
+ *
+ * It is also the GPS source for Water Wolf surveys ([SurveySession]): every
+ * fix is forwarded there, and the service keeps running while either a track
+ * or a survey is active. A survey gets its own notification, which is the
+ * foreground one while it runs.
  */
 class TrackService : Service(), LocationListener {
 
     private val handler = Handler(Looper.getMainLooper())
     private var listening = false
+    /** The notification currently tied to startForeground, 0 = none. */
+    private var foregroundId = 0
+    private var ticks = 0
 
     private val refresh = object : Runnable {
         override fun run() {
-            if (recording == null) return
-            notificationManager().notify(NOTIF_ID, buildNotification())
-            handler.postDelayed(this, NOTIFY_MS)
+            if (!anythingActive()) return
+            // The survey checks for a lost GPS signal every second.
+            val lost = SurveySession.tick(this@TrackService)
+            if (lost || ticks++ % NOTIFY_TICKS == 0) showNotifications()
+            handler.postDelayed(this, TICK_MS)
         }
     }
+
+    private fun anythingActive() = recording != null || SurveySession.isActive(this)
 
     override fun onCreate() {
         super.onCreate()
@@ -56,19 +70,23 @@ class TrackService : Service(), LocationListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (recording == null) restore(this)
-        startAsForeground(buildNotification())
-        if (recording == null) {
+        SurveySession.restore(this)
+        // startForeground must follow startForegroundService, even when about to stop.
+        if (!anythingActive()) {
+            startAsForeground(NOTIF_ID, buildNotification())
             shutDown()
             return START_NOT_STICKY
         }
+        showNotifications()
         when (intent?.action) {
             ACTION_PAUSE -> pause(this)
             ACTION_RESUME -> resume(this)
-            ACTION_STOP -> {
-                stop(this)
-                return START_NOT_STICKY
-            }
+            ACTION_STOP -> stop(this)
+            ACTION_SURVEY_PAUSE -> surveyAction(SurveyAction.PAUSE)
+            ACTION_SURVEY_RESUME -> surveyAction(SurveyAction.RESUME)
+            ACTION_SURVEY_MARK -> surveyAction(SurveyAction.ADD_MARKER)
         }
+        if (!anythingActive()) return START_NOT_STICKY
         startListening()
         handler.removeCallbacks(refresh)
         handler.post(refresh)
@@ -107,17 +125,36 @@ class TrackService : Service(), LocationListener {
     override fun onLocationChanged(location: Location) {
         val changed = synchronized(lock) { recording?.let { add(this, it, location) } ?: false }
         if (changed) persist(this)
+        if (SurveySession.onFix(this, location)) showNotifications()
     }
 
-    // Older Android versions call these; nothing to do.
+    private fun surveyAction(action: SurveyAction) {
+        runCatching { SurveySession.act(this, action) }
+            .onFailure { android.util.Log.w("TrackService", "Survey action $action refused", it) }
+        showNotifications()
+    }
+
+    // Older Android versions call this one; nothing to do.
     @Deprecated("Deprecated in Java")
     override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
     override fun onProviderEnabled(provider: String) {}
-    override fun onProviderDisabled(provider: String) {}
+    override fun onProviderDisabled(provider: String) {
+        if (provider != LocationManager.GPS_PROVIDER) return
+        SurveySession.onGpsDisabled(this)
+        showNotifications()
+    }
+
+    /** Keeps going while a track or survey is active, else stops the service. */
+    private fun release() {
+        if (anythingActive()) showNotifications() else shutDown()
+    }
 
     private fun shutDown() {
         stopListening()
         handler.removeCallbacks(refresh)
+        notificationManager().cancel(SURVEY_NOTIF_ID)
+        notificationManager().cancel(NOTIF_ID)
+        foregroundId = 0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
@@ -129,12 +166,64 @@ class TrackService : Service(), LocationListener {
 
     // ---- notification -------------------------------------------------------
 
-    private fun startAsForeground(notification: Notification) {
+    private fun startAsForeground(id: Int, notification: Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {
-            startForeground(NOTIF_ID, notification)
+            startForeground(id, notification)
         }
+        foregroundId = id
+    }
+
+    /** The survey's notification is the foreground one while it runs; the track's shows beside it. */
+    private fun showNotifications() {
+        val survey = SurveySession.isActive(this)
+        val track = recording != null
+        if (!survey && !track) return
+        val nm = notificationManager()
+        val fgId = if (survey) SURVEY_NOTIF_ID else NOTIF_ID
+        val fg = if (survey) buildSurveyNotification() else buildNotification()
+        if (fgId != foregroundId) startAsForeground(fgId, fg) else nm.notify(fgId, fg)
+        if (survey && track) nm.notify(NOTIF_ID, buildNotification())
+        if (!track && fgId != NOTIF_ID) nm.cancel(NOTIF_ID)
+        if (!survey) nm.cancel(SURVEY_NOTIF_ID)
+    }
+
+    private fun buildSurveyNotification(): Notification {
+        val s = SurveySession.state(this)
+        val state = s.optString("state")
+        val moving = state == "MOVING"
+        val paused = state == "PAUSED"
+        val title = when (state) {
+            "MOVING" -> "Survey · recording GPS"
+            "PAUSED" -> "Survey paused"
+            else -> "Camera recording · not moving yet"
+        }
+        val parts = mutableListOf(
+            formatDuration(if (moving || paused) s.optLong("surveyElapsedMs") else s.optLong("cameraElapsedMs")),
+        )
+        if (moving || paused) parts.add("${s.optInt("pointCount")} points")
+        parts.add(
+            when (s.optString("gps")) {
+                "off" -> "GPS is off"
+                "lost" -> "No GPS signal"
+                "waiting" -> "Waiting for GPS"
+                else -> if (s.isNull("accuracy")) "GPS ok" else "GPS ±%.0f m".format(s.optDouble("accuracy"))
+            },
+        )
+        val builder = NotificationCompat.Builder(this, SURVEY_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_app)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setContentIntent(openAppIntent())
+            .setContentTitle(title)
+            .setContentText(parts.joinToString(" · "))
+        if (moving) builder.addAction(0, "Pause", serviceIntent(ACTION_SURVEY_PAUSE, 3))
+        if (paused) builder.addAction(0, "Resume", serviceIntent(ACTION_SURVEY_RESUME, 4))
+        builder.addAction(0, "Add marker", serviceIntent(ACTION_SURVEY_MARK, 5))
+        return builder.build()
     }
 
     private fun buildNotification(): Notification {
@@ -209,6 +298,11 @@ class TrackService : Service(), LocationListener {
     companion object {
         private const val CHANNEL = "track_recording"
         private const val NOTIF_ID = 0x7A11
+        private const val SURVEY_CHANNEL = "survey_recording"
+        private const val SURVEY_NOTIF_ID = 0x7A12
+        private const val ACTION_SURVEY_PAUSE = "survey.PAUSE"
+        private const val ACTION_SURVEY_RESUME = "survey.RESUME"
+        private const val ACTION_SURVEY_MARK = "survey.MARK"
         private const val PREFS = "MapTrackPrefs"
         private const val KEY_STATE = "recording"
         private const val ACTION_RUN = "track.RUN"
@@ -216,7 +310,9 @@ class TrackService : Service(), LocationListener {
         private const val ACTION_RESUME = "track.RESUME"
         private const val ACTION_STOP = "track.STOP"
         private const val FIX_MS = 1000L
-        private const val NOTIFY_MS = 5000L
+        private const val TICK_MS = 1000L
+        /** The notifications refresh every this many ticks. */
+        private const val NOTIFY_TICKS = 5
         /** Fixes less accurate than this (meters) are ignored. */
         private const val MAX_ACCURACY = 35f
         /** A point is stored after moving this far (m)... */
@@ -254,7 +350,7 @@ class TrackService : Service(), LocationListener {
                 rec.lastSpeed = -1.0
             }
             persist(context)
-            instance?.let { it.notificationManager().notify(NOTIF_ID, it.buildNotification()) }
+            instance?.let { s -> s.handler.post { s.showNotifications() } }
         }
 
         fun resume(context: Context) {
@@ -267,7 +363,7 @@ class TrackService : Service(), LocationListener {
                 rec.lastLat = Double.NaN
             }
             persist(context)
-            instance?.let { it.notificationManager().notify(NOTIF_ID, it.buildNotification()) }
+            instance?.let { s -> s.handler.post { s.showNotifications() } }
         }
 
         /** Stops and saves the track; returns its summary, or null when nothing was recording. */
@@ -296,7 +392,7 @@ class TrackService : Service(), LocationListener {
             }
             currentFile(context).delete()
             prefs(context).edit().remove(KEY_STATE).apply()
-            instance?.shutDown()
+            instance?.let { s -> s.handler.post { s.release() } }
             return saved
         }
 
@@ -310,7 +406,18 @@ class TrackService : Service(), LocationListener {
 
         /** Restarts the service after the process died mid-recording. */
         fun ensureRunning(context: Context) {
-            if (instance == null && state(context).optString("status") != "idle") launch(context, ACTION_RUN)
+            if (instance != null) return
+            if (state(context).optString("status") != "idle" || SurveySession.isActive(context)) launch(context, ACTION_RUN)
+        }
+
+        /** A survey started, changed or ended: run, refresh or stop the service to match. */
+        fun surveyChanged(context: Context) {
+            val service = instance
+            if (service == null) {
+                if (SurveySession.isActive(context)) launch(context, ACTION_RUN)
+            } else {
+                service.handler.post { service.release() }
+            }
         }
 
         /** The recorded points from index [from], as [[lat, lon, alt, time, speed]]. */
@@ -407,6 +514,14 @@ class TrackService : Service(), LocationListener {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL, "Track recording", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "Distance, time and controls while a map track is being recorded."
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
+                },
+            )
+            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(SURVEY_CHANNEL, "Water Wolf survey", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Survey time, GPS signal and controls while a Water Wolf survey is recorded."
                     setSound(null, null)
                     enableVibration(false)
                     setShowBadge(false)
