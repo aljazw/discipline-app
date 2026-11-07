@@ -68,6 +68,8 @@ data class Fix(
     val speed: Double? = null,
     val altitude: Double? = null,
     val bearing: Double? = null,
+    /** "gps" (satellites), or "fused" / "network" for a quick but rougher fix. */
+    val provider: String? = null,
 )
 
 /** A stored track point. `segment` counts up after every pause, so paused gaps are explicit. */
@@ -82,6 +84,7 @@ data class SurveyPoint(
     val bearing: Double?,
     val gpsTime: Long,
     val segment: Int,
+    val provider: String? = null,
 )
 
 data class SurveyEvent(
@@ -228,6 +231,7 @@ class SurveyRecord(
             bearing = fix.bearing,
             gpsTime = fix.gpsTime,
             segment = segment,
+            provider = fix.provider,
         )
         lastPoint?.let { last ->
             // Badly placed fixes are kept as points but don't add to the distance.
@@ -238,10 +242,15 @@ class SurveyRecord(
         return FixResult(point, changed)
     }
 
-    /** Called about once a second; true when it added an event (signal lost). */
+    /**
+     * Called about once a second; true when it added an event (signal lost).
+     * Before the very first fix there is nothing to lose: that is "waiting for
+     * GPS" (a cold start can take minutes), not a lost signal.
+     */
     fun tick(at: Moment): Boolean {
+        val fix = lastFix ?: return false
         if (state != SurveyState.MOVING || gpsLost) return false
-        val since = maxOf(lastFix?.mono ?: Long.MIN_VALUE, segmentStartMono)
+        val since = maxOf(fix.mono, segmentStartMono)
         if (at.mono - since < SIGNAL_LOST_MS) return false
         signalLost(at, "no fix for ${(at.mono - since) / 1000} s")
         return true

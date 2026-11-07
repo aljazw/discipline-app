@@ -48,6 +48,7 @@ object SurveyJson {
         .put("lat", p.lat).put("lon", p.lon)
         .putNullable("accuracy", p.accuracy).putNullable("speed", p.speed).putNullable("altitude", p.altitude).putNullable("bearing", p.bearing)
         .put("gpsTime", p.gpsTime).put("segment", p.segment)
+        .put("provider", p.provider ?: JSONObject.NULL)
 
     fun point(j: JSONObject) = SurveyPoint(
         utc = j.getLong("utc"),
@@ -60,11 +61,13 @@ object SurveyJson {
         bearing = j.optNumber("bearing"),
         gpsTime = j.optLong("gpsTime"),
         segment = j.optInt("segment"),
+        provider = if (j.isNull("provider")) null else j.optString("provider"),
     )
 
     private fun fix(f: Fix?): Any = f?.let {
         JSONObject().put("lat", it.lat).put("lon", it.lon).put("mono", it.mono).put("gpsTime", it.gpsTime)
             .putNullable("accuracy", it.accuracy).putNullable("speed", it.speed).putNullable("altitude", it.altitude).putNullable("bearing", it.bearing)
+            .put("provider", it.provider ?: JSONObject.NULL)
     } ?: JSONObject.NULL
 
     private fun fix(j: JSONObject?): Fix? = j?.let {
@@ -72,6 +75,7 @@ object SurveyJson {
             lat = it.getDouble("lat"), lon = it.getDouble("lon"), mono = it.getLong("mono"), gpsTime = it.optLong("gpsTime"),
             accuracy = it.optNumber("accuracy"), speed = it.optNumber("speed"),
             altitude = it.optNumber("altitude"), bearing = it.optNumber("bearing"),
+            provider = if (it.isNull("provider")) null else it.optString("provider"),
         )
     }
 
@@ -137,7 +141,8 @@ object SurveyJson {
                 JSONObject()
                     .put("mono", "Android SystemClock.elapsedRealtime, ms")
                     .put("utc", "Unix time, ms, UTC, from the phone clock")
-                    .put("gpsTime", "Location.time of each fix, ms, from the satellites")
+                    .put("gpsTime", "Location.time of each fix, ms (satellite time when provider is gps)")
+                    .put("provider", "gps = satellites; fused / network = quick rough fix while GPS has none, check accuracy")
                     .put("bootCount", r.bootCount)
                     .put("monoOffsetMs", r.monoOffset)
                     .put("timeZone", TimeZone.getDefault().id),

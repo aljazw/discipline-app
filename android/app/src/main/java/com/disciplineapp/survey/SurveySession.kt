@@ -108,6 +108,7 @@ object SurveySession {
                 speed = if (loc.hasSpeed()) round(loc.speed.toDouble(), 2) else null,
                 altitude = if (loc.hasAltitude()) round(loc.altitude, 1) else null,
                 bearing = if (loc.hasBearing()) round(loc.bearing.toDouble(), 1) else null,
+                provider = loc.provider,
             )
             val result = rec.onFix(fix, at)
             result.point?.let { p ->
@@ -147,6 +148,7 @@ object SurveySession {
                 !gpsEnabled(context) -> "off"
                 rec.gpsLost -> "lost"
                 fix == null || fixAge!! > SurveyRecord.SIGNAL_LOST_MS -> "waiting"
+                fix.provider != null && fix.provider != LocationManager.GPS_PROVIDER -> "rough"
                 (fix.accuracy ?: 0.0) > WEAK_ACCURACY -> "weak"
                 else -> "ok"
             }
@@ -163,7 +165,35 @@ object SurveySession {
                 .put("fixAgeMs", fixAge ?: JSONObject.NULL)
                 .put("lat", fix?.lat ?: JSONObject.NULL).put("lon", fix?.lon ?: JSONObject.NULL)
                 .put("speed", fix?.speed ?: JSONObject.NULL)
+                .put("provider", fix?.provider ?: JSONObject.NULL)
+                .put("markers", JSONArray().apply {
+                    rec.events.filter { it.type == SurveyEventType.MARKER_ADDED }.forEach { e ->
+                        put(
+                            JSONObject().put("number", e.number).put("text", e.text ?: JSONObject.NULL)
+                                .put("lat", e.lat ?: JSONObject.NULL).put("lon", e.lon ?: JSONObject.NULL),
+                        )
+                    }
+                })
         }
+    }
+
+    /** The running survey's points from index [from], as [[lon, lat, segment], ...] for drawing. */
+    fun points(context: Context, from: Int): JSONArray {
+        val out = JSONArray()
+        synchronized(lock) {
+            if (record == null) return out
+            val file = pointsFile(context)
+            if (!file.exists()) return out
+            file.useLines { lines ->
+                lines.drop(from).forEach { line ->
+                    runCatching {
+                        val p = JSONObject(line)
+                        out.put(JSONArray().put(p.getDouble("lon")).put(p.getDouble("lat")).put(p.optInt("segment")))
+                    }
+                }
+            }
+        }
+        return out
     }
 
     fun gpsEnabled(context: Context) =

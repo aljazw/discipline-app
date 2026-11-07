@@ -1,5 +1,5 @@
 /** The cards that float over the map: navigation banner, info panel, selection and drawing panels. */
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { shapes, spacing } from '../../theme';
 import { MapUnits } from '../../types/types';
@@ -127,15 +127,46 @@ export const InfoPanel: React.FC<{
     onRoute: () => void;
     onMeasure: () => void;
     onSaved: () => void;
+    /** Opens the Water Wolf survey controls. */
+    onSurvey: () => void;
+    /** A running survey's one-line status (its panel is hidden); tap to open it. */
+    surveyLine?: string | null;
     /** Set while following a route or going to a place: shows a Stop button. */
     onStopNav?: () => void;
     style?: StyleProp<ViewStyle>;
-}> = ({ fix, units, recording, onRecord, onPauseResume, onStopRecording, onRoute, onMeasure, onSaved, onStopNav, style }) => {
+}> = ({
+    fix,
+    units,
+    recording,
+    onRecord,
+    onPauseResume,
+    onStopRecording,
+    onRoute,
+    onMeasure,
+    onSaved,
+    onSurvey,
+    surveyLine,
+    onStopNav,
+    style,
+}) => {
     const { colors } = useTheme().theme;
     const live = recording.status !== 'idle';
     const speed = speedParts(fix?.speed ?? 0, units);
     return (
         <Panel style={[styles.bar, style]}>
+            {!!surveyLine && (
+                <Pressable
+                    onPress={onSurvey}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${surveyLine}. Show survey controls`}
+                    style={[styles.recording, { borderBottomColor: colors.border }]}>
+                    <View style={[styles.dot, { backgroundColor: colors.primaryGreen }]} />
+                    <ThemedText size="small" weight="medium" style={styles.flex} tabular numberOfLines={1}>
+                        {surveyLine}
+                    </ThemedText>
+                    <Icon name="Up" size={18} tint={colors.muted} />
+                </Pressable>
+            )}
             {live && (
                 <View style={[styles.recording, { borderBottomColor: colors.border }]}>
                     <View style={[styles.dot, { backgroundColor: recording.status === 'paused' ? colors.muted : colors.primaryRed }]} />
@@ -155,6 +186,7 @@ export const InfoPanel: React.FC<{
             <View style={styles.barActions}>
                 {onStopNav && <PanelAction icon="Close" label="Stop" tint={colors.accent} onPress={onStopNav} />}
                 {!live && <PanelAction icon="Record" label="Record" tint={colors.primaryRed} onPress={onRecord} />}
+                <PanelAction icon="Video" label="Survey" onPress={onSurvey} active={!!surveyLine} />
                 <PanelAction icon="Route" label="Plan route" onPress={onRoute} />
                 <PanelAction icon="Ruler" label="Measure" onPress={onMeasure} />
                 <PanelAction icon="Pin" label="Saved" onPress={onSaved} />

@@ -73,6 +73,24 @@ export const MarkPin: React.FC<{ kind: MarkKind; name?: string; selected?: boole
     );
 };
 
+/** A numbered survey marker: a small disc with its number, and its note under it. */
+export const NumberPin: React.FC<{ number: number; color: string; text?: string | null }> = ({ number, color, text }) => (
+    <View style={styles.pin} accessibilityLabel={`Marker ${number}${text ? `, ${text}` : ''}`}>
+        <View style={[styles.disc, styles.numberDisc, { backgroundColor: color }]}>
+            <ThemedText size="tiny" weight="bold" style={styles.number}>
+                {number}
+            </ThemedText>
+        </View>
+        {!!text && (
+            <View style={styles.label}>
+                <ThemedText size="tiny" weight="strong" numberOfLines={1} style={styles.labelText}>
+                    {text}
+                </ThemedText>
+            </View>
+        )}
+    </View>
+);
+
 /** One number in the map's info panel: label, big value, unit. */
 export const Stat: React.FC<{ label: string; value: string; unit?: string; align?: 'left' | 'center' }> = ({
     label,
@@ -147,6 +165,14 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#FFFFFF',
         elevation: shapes.elevation.low,
+    },
+    numberDisc: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+    },
+    number: {
+        color: '#FFFFFF',
     },
     discSelected: {
         transform: [{ scale: 1.25 }],

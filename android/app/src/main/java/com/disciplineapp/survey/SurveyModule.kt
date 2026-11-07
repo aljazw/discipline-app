@@ -30,6 +30,10 @@ class SurveyModule(private val ctx: ReactApplicationContext) : ReactContextBaseJ
         SurveySession.state(ctx).toString()
     }
 
+    /** Points recorded so far from index [from], for drawing the live survey line. */
+    @ReactMethod
+    fun points(from: Int, promise: Promise) = background(promise) { SurveySession.points(ctx, from).toString() }
+
     @ReactMethod
     fun startCamera(promise: Promise) = act(promise, SurveyAction.START_CAMERA)
 

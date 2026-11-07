@@ -114,7 +114,22 @@ class TrackService : Service(), LocationListener {
         } catch (e: Exception) {
             android.util.Log.w("TrackService", "GPS unavailable", e)
         }
+        // A satellite cold start can take minutes. Android's fused (or network) location
+        // gives a rough position within seconds meanwhile; GPS fixes win once they come.
+        val quick = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && lm.hasProvider(LocationManager.FUSED_PROVIDER)) {
+            LocationManager.FUSED_PROVIDER
+        } else {
+            LocationManager.NETWORK_PROVIDER
+        }
+        try {
+            lm.requestLocationUpdates(quick, FIX_MS, 0f, this, Looper.getMainLooper())
+            listening = true
+        } catch (e: Exception) {
+            android.util.Log.w("TrackService", "$quick location unavailable", e)
+        }
     }
+
+    private var lastGpsFix = 0L
 
     private fun stopListening() {
         if (!listening) return
@@ -123,6 +138,13 @@ class TrackService : Service(), LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
+        // Satellite fixes are the real track; the quick provider only fills in while they're missing.
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (location.provider == LocationManager.GPS_PROVIDER) {
+            lastGpsFix = now
+        } else if (lastGpsFix > 0 && now - lastGpsFix < GPS_PREFERRED_MS) {
+            return
+        }
         val changed = synchronized(lock) { recording?.let { add(this, it, location) } ?: false }
         if (changed) persist(this)
         if (SurveySession.onFix(this, location)) showNotifications()
@@ -207,7 +229,8 @@ class TrackService : Service(), LocationListener {
             when (s.optString("gps")) {
                 "off" -> "GPS is off"
                 "lost" -> "No GPS signal"
-                "waiting" -> "Waiting for GPS"
+                "waiting" -> "Getting a GPS fix"
+                "rough" -> "Rough position, no satellites yet"
                 else -> if (s.isNull("accuracy")) "GPS ok" else "GPS ±%.0f m".format(s.optDouble("accuracy"))
             },
         )
@@ -311,6 +334,8 @@ class TrackService : Service(), LocationListener {
         private const val ACTION_STOP = "track.STOP"
         private const val FIX_MS = 1000L
         private const val TICK_MS = 1000L
+        /** Quick (fused / network) fixes are ignored while a GPS fix came within this long. */
+        private const val GPS_PREFERRED_MS = 3000L
         /** The notifications refresh every this many ticks. */
         private const val NOTIFY_TICKS = 5
         /** Fixes less accurate than this (meters) are ignored. */

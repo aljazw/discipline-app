@@ -254,6 +254,34 @@ class SurveyMachineTest {
     }
 
     @Test
+    fun waitingForTheFirstFixIsNotALostSignal() {
+        val rec = survey()
+        record(rec, SurveyAction.START_CAMERA)
+        record(rec, SurveyAction.START_MOVING)
+        // A GPS cold start: two minutes without any fix.
+        repeat(120) { advance(1000); assertFalse(rec.tick(now())) }
+        assertFalse(rec.gpsLost)
+        assertTrue(rec.events.none { it.type == SurveyEventType.GPS_LOST })
+        // The movement start gets the first fix that arrives (within 30 s it would; this is later).
+        advance(1000)
+        assertNotNull(rec.onFix(fix(), now()).point)
+        assertEquals(1, rec.pointCount)
+    }
+
+    @Test
+    fun pointsKeepWhichProviderMadeThem() {
+        val rec = survey()
+        record(rec, SurveyAction.START_CAMERA)
+        record(rec, SurveyAction.START_MOVING)
+        advance(1000)
+        val rough = rec.onFix(fix(accuracy = 60.0).copy(provider = "fused"), now()).point!!
+        advance(1000)
+        val gps = rec.onFix(fix().copy(provider = "gps"), now()).point!!
+        assertEquals("fused", rough.provider)
+        assertEquals("gps", gps.provider)
+    }
+
+    @Test
     fun inaccurateFixesDontAddDistance() {
         val rec = survey()
         record(rec, SurveyAction.START_CAMERA)

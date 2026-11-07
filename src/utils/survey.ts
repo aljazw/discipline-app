@@ -28,8 +28,20 @@ export type SurveyEventType =
     | 'GPS_RESTORED'
     | 'DEVICE_RESTARTED';
 
-/** ok, weak (poor accuracy), waiting (no fix yet), lost (no fix while moving), off (GPS disabled). */
-export type GpsStatus = 'ok' | 'weak' | 'waiting' | 'lost' | 'off';
+/**
+ * ok; weak (poor accuracy); rough (only a quick network / fused position, no
+ * satellites yet); waiting (no fix yet, a cold start can take minutes);
+ * lost (no fix for a while after having one); off (GPS disabled).
+ */
+export type GpsStatus = 'ok' | 'weak' | 'rough' | 'waiting' | 'lost' | 'off';
+
+/** A marker of the running survey, for drawing on the map. */
+export interface LiveMarker {
+    number: number;
+    text: string | null;
+    lat: number | null;
+    lon: number | null;
+}
 
 export interface LiveSurvey {
     state: SurveyState;
@@ -51,6 +63,8 @@ export interface LiveSurvey {
     lat: number | null;
     lon: number | null;
     speed: number | null;
+    provider: string | null;
+    markers: LiveMarker[];
 }
 
 export interface Moment {
@@ -79,6 +93,8 @@ export interface SurveyPoint extends Moment {
     gpsTime: number;
     /** Counts up after every pause. */
     segment: number;
+    /** "gps" = satellites; "fused" / "network" = rough fix while GPS had none. */
+    provider?: string | null;
 }
 
 export interface SurveySummary {
@@ -124,6 +140,8 @@ export const IDLE_SURVEY: LiveSurvey = {
     lat: null,
     lon: null,
     speed: null,
+    provider: null,
+    markers: [],
 };
 
 const parse = <T>(raw: unknown, fallback: T): T => {
@@ -141,7 +159,19 @@ const num = (v: unknown, fallback = 0) => (typeof v === 'number' && isFinite(v) 
 const numOrNull = (v: unknown) => (typeof v === 'number' && isFinite(v) ? v : null);
 
 const STATES: SurveyState[] = ['IDLE', 'CAMERA_RECORDING_STARTED', 'MOVING', 'PAUSED', 'COMPLETED', 'DISCARDED'];
-const GPS: GpsStatus[] = ['ok', 'weak', 'waiting', 'lost', 'off'];
+const GPS: GpsStatus[] = ['ok', 'weak', 'rough', 'waiting', 'lost', 'off'];
+
+const toMarkers = (v: unknown): LiveMarker[] =>
+    Array.isArray(v)
+        ? v
+              .filter(m => m && typeof m.number === 'number')
+              .map(m => ({
+                  number: m.number,
+                  text: typeof m.text === 'string' ? m.text : null,
+                  lat: numOrNull(m.lat),
+                  lon: numOrNull(m.lon),
+              }))
+        : [];
 
 /** The native state JSON, checked. Anything unreadable counts as idle. */
 export const toLiveSurvey = (raw: unknown): LiveSurvey => {
@@ -167,6 +197,8 @@ export const toLiveSurvey = (raw: unknown): LiveSurvey => {
         lat: numOrNull(v.lat),
         lon: numOrNull(v.lon),
         speed: numOrNull(v.speed),
+        provider: typeof v.provider === 'string' ? v.provider : null,
+        markers: toMarkers(v.markers),
     };
 };
 
@@ -192,6 +224,29 @@ export const formatClock = (ms: number) => {
     const mm = String(Math.floor(s / 60) % 60).padStart(2, '0');
     const ss = String(s % 60).padStart(2, '0');
     return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+};
+
+/**
+ * Adds [lon, lat, segment] points to the lines, starting a new line when the
+ * segment changes (after a pause). `last` holds the last line's segment.
+ */
+export const appendPoints = (
+    lines: [number, number][][],
+    last: { current: number | null },
+    points: [number, number, number][],
+): [number, number][][] => {
+    const next = [...lines];
+    for (const [lon, lat, segment] of points) {
+        if (next.length === 0 || segment !== last.current) {
+            next.push([]);
+            last.current = segment;
+        } else if (next[next.length - 1] === lines[next.length - 1]) {
+            // Copy the line before changing it, so React sees new data.
+            next[next.length - 1] = [...next[next.length - 1]];
+        }
+        next[next.length - 1].push([lon, lat]);
+    }
+    return next;
 };
 
 // ---- export -------------------------------------------------------------------
@@ -274,6 +329,10 @@ export const surveyNative = {
             return IDLE_SURVEY;
         }
     },
+
+    /** Live points from index `from`: [lon, lat, segment]. */
+    points: async (from: number): Promise<[number, number, number][]> =>
+        SurveyNative ? parse<[number, number, number][]>(await SurveyNative.points(from), []) : [],
 
     startCamera: () => live(SurveyNative.startCamera()),
     startMoving: () => live(SurveyNative.startMoving()),

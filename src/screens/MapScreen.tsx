@@ -22,7 +22,10 @@ import Icon from '../components/Icon';
 import LayersDialog, { ImportProgress } from '../components/map/LayersDialog';
 import MarkEditor, { MarkDraft } from '../components/map/MarkEditor';
 import { DrawPanel, Fix, InfoPanel, NavInfo, SelectionPanel, SheetAction } from '../components/map/MapPanels';
-import { MapButton, MarkPin } from '../components/map/mapUi';
+import { MapButton, MarkPin, NumberPin } from '../components/map/mapUi';
+import { SurveyPanel, surveySummary } from '../components/map/SurveyPanel';
+import { useSurvey } from '../hooks/useSurvey';
+import { isSurveyActive } from '../utils/survey';
 import { useTheme } from '../context/ThemeContext';
 import { gutter, spacing } from '../theme';
 import {
@@ -85,6 +88,8 @@ const MAX_PINS = 150;
 const MOVING = 1.2;
 /** Recorded tracks are drawn in violet, apart from routes (accent) and the live track (red). */
 const TRACK_COLOR = '#8A6FD1';
+/** The Water Wolf survey line and markers: teal, apart from everything else. */
+const SURVEY_COLOR = '#119DA4';
 
 type Follow = 'off' | 'north' | 'heading';
 type Mode = 'browse' | 'route' | 'measure';
@@ -188,6 +193,18 @@ const MapScreen: React.FC = () => {
     const [mapReady, setMapReady] = useState(false);
 
     const recording = useRecording();
+    const survey = useSurvey();
+    const surveyActive = isSurveyActive(survey.state.state);
+    const [surveyOpen, setSurveyOpen] = useState(false);
+    /** Opens the survey panel by itself once, when the map opens on a running survey. */
+    const surveyShown = useRef(false);
+    useEffect(() => {
+        if (surveyActive && !surveyShown.current) {
+            surveyShown.current = true;
+            setSurveyOpen(true);
+            setLocated(true);
+        }
+    }, [surveyActive]);
     /** A feature (route, track) was just tapped, so the same tap doesn't also clear the selection. */
     const featurePressAt = useRef(0);
     const lastAlert = useRef('');
@@ -777,6 +794,11 @@ const MapScreen: React.FC = () => {
         [shownTrack],
     );
     const liveShape = useMemo(() => collection(recording.path.length > 1 ? [line(recording.path)] : []), [recording.path]);
+    const surveyShape = useMemo(
+        () => collection(survey.segments.filter(seg => seg.length > 1).map(seg => line(seg))),
+        [survey.segments],
+    );
+    const surveyMarkers = survey.state.markers.filter(m => m.lat !== null && m.lon !== null);
     const navRoute = nav?.kind === 'route' ? nav.route : null;
     const navRouteShape = useMemo(() => collection(navRoute ? [line(navRoute.points)] : []), [navRoute]);
     const navLineShape = useMemo(
@@ -801,6 +823,7 @@ const MapScreen: React.FC = () => {
             navRoute: { lineColor: colors.accent, lineWidth: 5, lineCap: 'round', lineJoin: 'round' } as const,
             navLine: { lineColor: colors.accent, lineWidth: 2.5, lineDasharray: [1, 1.5] },
             live: { lineColor: colors.primaryRed, lineWidth: 4, lineCap: 'round', lineJoin: 'round' } as const,
+            survey: { lineColor: SURVEY_COLOR, lineWidth: 4.5, lineCap: 'round', lineJoin: 'round' } as const,
             draft: { lineColor: drawColor, lineWidth: 3, lineDasharray: [2, 1] },
             draftPoints: { circleRadius: 5, circleColor: '#FFFFFF', circleStrokeWidth: 2.5, circleStrokeColor: drawColor },
         }),
@@ -1002,6 +1025,9 @@ const MapScreen: React.FC = () => {
                         style={layers.live}
                     />
                 </ShapeSource>
+                <ShapeSource id="survey-track" shape={surveyShape}>
+                    <LineLayer id="survey-track-line" style={layers.survey} />
+                </ShapeSource>
                 <ShapeSource id="draft" shape={draftShape}>
                     <LineLayer
                         id="draft-line"
@@ -1028,6 +1054,11 @@ const MapScreen: React.FC = () => {
                                 }
                             }}
                         />
+                    </MarkerView>
+                ))}
+                {surveyMarkers.map(m => (
+                    <MarkerView key={`survey-${m.number}`} coordinate={[m.lon!, m.lat!]} anchor={{ x: 0.5, y: 0.25 }} allowOverlap>
+                        <NumberPin number={m.number} color={SURVEY_COLOR} text={m.text} />
                     </MarkerView>
                 ))}
                 {selection?.kind === 'point' ? (
@@ -1075,7 +1106,21 @@ const MapScreen: React.FC = () => {
                 </View>
                 <View onLayout={e => setPanelHeight(e.nativeEvent.layout.height)}>
                     {drawPanel ??
-                        selectionPanel ?? (
+                        selectionPanel ??
+                        (surveyOpen ? (
+                            <SurveyPanel
+                                survey={survey}
+                                units={units}
+                                onClose={() => setSurveyOpen(false)}
+                                onStarted={() => {
+                                    setLocated(true);
+                                    if (follow === 'off') {
+                                        setFollow('north');
+                                    }
+                                }}
+                                onSaved={() => navigation.navigate('MapLibrary', { tab: 'surveys' })}
+                            />
+                        ) : (
                             <InfoPanel
                                 fix={fix}
                                 units={units}
@@ -1086,9 +1131,11 @@ const MapScreen: React.FC = () => {
                                 onRoute={() => startDrawing('route')}
                                 onMeasure={() => startDrawing('measure')}
                                 onSaved={() => navigation.navigate('MapLibrary')}
+                                onSurvey={() => setSurveyOpen(true)}
+                                surveyLine={surveyActive ? surveySummary(survey.state) : null}
                                 onStopNav={nav ? () => setNav(null) : undefined}
                             />
-                        )}
+                        ))}
                 </View>
             </View>
 

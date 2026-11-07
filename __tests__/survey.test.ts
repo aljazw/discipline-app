@@ -3,6 +3,7 @@ import {
     Survey,
     SurveyEvent,
     SurveyPoint,
+    appendPoints,
     buildSurveyGpx,
     buildSurveyJson,
     formatClock,
@@ -84,6 +85,36 @@ describe('survey state', () => {
         expect(s.accuracy).toBeNull();
         expect(s.surveyElapsedMs).toBe(9000);
         expect(s.markerCount).toBe(0);
+    });
+
+    it('reads markers, the provider and the rough-position status', () => {
+        const s = toLiveSurvey(
+            JSON.stringify({
+                state: 'MOVING',
+                gps: 'rough',
+                provider: 'fused',
+                markers: [{ number: 1, text: 'Rock', lat: 45, lon: 14 }, { number: 2, text: null, lat: null, lon: null }, { bad: 1 }],
+            }),
+        );
+        expect(s.gps).toBe('rough');
+        expect(s.provider).toBe('fused');
+        expect(s.markers).toEqual([
+            { number: 1, text: 'Rock', lat: 45, lon: 14 },
+            { number: 2, text: null, lat: null, lon: null },
+        ]);
+    });
+
+    it('splits the live line at pauses without changing earlier lines', () => {
+        const last = { current: null as number | null };
+        const a = appendPoints([], last, [[14, 45, 0], [14.1, 45, 0]]);
+        expect(a).toEqual([[[14, 45], [14.1, 45]]]);
+        const b = appendPoints(a, last, [[14.2, 45, 0], [14.3, 45, 1], [14.4, 45, 1]]);
+        expect(b).toEqual([[[14, 45], [14.1, 45], [14.2, 45]], [[14.3, 45], [14.4, 45]]]);
+        // The first call's result is untouched (React compares by reference).
+        expect(a[0]).toHaveLength(2);
+        expect(b[0]).not.toBe(a[0]);
+        const c = appendPoints(b, last, []);
+        expect(c).toEqual(b);
     });
 
     it('enables only the buttons the state machine allows', () => {

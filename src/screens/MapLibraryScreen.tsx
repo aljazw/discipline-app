@@ -305,7 +305,7 @@ const MapLibraryScreen: React.FC = () => {
         marks: { icon: 'Pin' as IconName, title: 'No places yet', text: 'Hold your finger on the map to drop a pin, then save it. Or import a GPX, KML or GeoJSON file.' },
         routes: { icon: 'Route' as IconName, title: 'No routes yet', text: 'Tap Plan route on the map and tap the points to pass, in order.' },
         tracks: { icon: 'Activity' as IconName, title: 'No tracks yet', text: 'Tap Record on the map. It keeps recording with the screen off.' },
-        surveys: { icon: 'Video' as IconName, title: 'No surveys yet', text: 'Record a Water Wolf camera survey from Tools → Water Wolf.' },
+        surveys: { icon: 'Video' as IconName, title: 'No surveys yet', text: 'Tap Survey on the map to record a Water Wolf camera survey with its GPS track.' },
         maps: { icon: 'Layers' as IconName, title: 'No offline maps', text: 'Add an MBTiles or PMTiles file, such as a sea chart, to use the map without internet.' },
     }[tab];
 

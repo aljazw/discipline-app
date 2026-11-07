@@ -47,8 +47,6 @@ export type RootStackParamList = {
     Map: { show?: MapTarget; navigate?: MapTarget } | undefined;
     /** Saved places, routes, tracks and map files. */
     MapLibrary: { tab?: MapLibraryTab } | undefined;
-    /** Water Wolf underwater camera survey recording. */
-    Survey: undefined;
 };
 
 export type MapLibraryTab = 'marks' | 'routes' | 'tracks' | 'surveys' | 'maps';
