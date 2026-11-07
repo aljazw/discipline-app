@@ -10,13 +10,13 @@ const PARTS: { icon: IconName; title: string; text: string; example: string }[] 
         icon: 'Calendar',
         title: 'Today',
         text: 'What needs doing today, gathered from the other three.',
-        example: 'Gym at 7:00, pay rent, work 9–17',
+        example: 'Gym at 7:00, call the dentist, work 9–17',
     },
     {
         icon: 'Target',
         title: 'Tasks',
         text: 'One-time things. You get a few days, then they must be done.',
-        example: 'Pay rent, or write a 20-page report',
+        example: 'Call the dentist, or write a 20-page report',
     },
     {
         icon: 'Habits',
