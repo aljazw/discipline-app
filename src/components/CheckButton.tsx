@@ -7,11 +7,13 @@ interface CheckButtonProps {
     checked: boolean;
     onPress: () => void;
     size?: number;
+    /** A circle instead of a rounded square, for light list rows. */
+    round?: boolean;
     accessibilityLabel?: string;
 }
 
 /** Check-off control with a short, restrained confirm animation. */
-const CheckButton: React.FC<CheckButtonProps> = ({ checked, onPress, size = 36, accessibilityLabel }) => {
+const CheckButton: React.FC<CheckButtonProps> = ({ checked, onPress, size = 36, round, accessibilityLabel }) => {
     const { theme } = useTheme();
     const scale = useRef(new Animated.Value(1)).current;
     const wasChecked = useRef(checked);
@@ -40,7 +42,7 @@ const CheckButton: React.FC<CheckButtonProps> = ({ checked, onPress, size = 36, 
             <Animated.View
                 style={[
                     styles.box,
-                    { width: size, height: size, borderRadius: size * 0.3, borderColor: theme.colors.border },
+                    { width: size, height: size, borderRadius: round ? size / 2 : size * 0.3, borderColor: theme.colors.border },
                     checked && { backgroundColor: theme.colors.primaryGreen, borderColor: theme.colors.primaryGreen },
                     { transform: [{ scale }] },
                 ]}>

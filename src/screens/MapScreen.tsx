@@ -21,7 +21,7 @@ import { ThemedText } from '../components/ThemedText';
 import Icon from '../components/Icon';
 import LayersDialog, { ImportProgress } from '../components/map/LayersDialog';
 import MarkEditor, { MarkDraft } from '../components/map/MarkEditor';
-import { DrawPanel, Fix, InfoPanel, NavBanner, NavInfo, SelectionPanel, SheetAction } from '../components/map/MapPanels';
+import { DrawPanel, Fix, InfoPanel, NavInfo, SelectionPanel, SheetAction } from '../components/map/MapPanels';
 import { MapButton, MarkPin } from '../components/map/mapUi';
 import { useTheme } from '../context/ThemeContext';
 import { gutter, spacing } from '../theme';
@@ -519,8 +519,7 @@ const MapScreen: React.FC = () => {
     const onMapLongPress = (feature: GeoJSON.Feature) => {
         const coords = (feature.geometry as GeoJSON.Point | undefined)?.coordinates as LngLat | undefined;
         if (mode === 'browse' && coords) {
-            haptics.toggle();
-            setSelection({ kind: 'point', pos: coords });
+            quickSave(coords);
         }
     };
 
@@ -543,6 +542,36 @@ const MapScreen: React.FC = () => {
     };
 
     // ---- places ----------------------------------------------------------------------
+
+    /** Saves a place at once with a numbered name; rename it later with Edit. */
+    const quickSave = async (pos: LngLat) => {
+        haptics.toggle();
+        const spots = marks.filter(m => /^Spot \d+$/.test(m.name)).map(m => Number(m.name.slice(5)));
+        const mark: MapMark = {
+            id: newId('mark'),
+            name: `Spot ${spots.length ? Math.max(...spots) + 1 : 1}`,
+            kind: 'spot',
+            lat: pos[1],
+            lon: pos[0],
+            note: '',
+            createdAt: Date.now(),
+        };
+        if (await saveMark(mark)) {
+            haptics.success();
+            await loadPlaces();
+            setSelection({ kind: 'mark', mark });
+        } else {
+            setError('Could not save the place.');
+        }
+    };
+
+    const saveHere = () => {
+        if (fix) {
+            quickSave(fix.pos);
+        } else {
+            setError(located ? 'Still waiting for a GPS fix.' : 'Allow location access to save where you are.');
+        }
+    };
 
     const saveMarkDraft = async (d: MarkDraft) => {
         const editing = markEditor;
@@ -689,6 +718,33 @@ const MapScreen: React.FC = () => {
         () => (base ? buildStyle(base, { serverUrl, seamarks, dark: isDarkMode }) : undefined),
         [base, serverUrl, seamarks, isDarkMode],
     );
+
+    /** A map file has no tiles below its lowest zoom, so don't let the camera go there. */
+    const fileMap = base?.kind === 'file' ? base.file : null;
+    const minZoom = fileMap ? fileMap.minZoom : undefined;
+
+    /** Opening a map file while looking elsewhere (or too far out) shows only black: jump to the file. */
+    useEffect(() => {
+        if (!fileMap || !mapReady) {
+            return;
+        }
+        const cam = cameraRef.current ?? prefsRef.current?.camera ?? START;
+        const [lon, lat] = cam.center;
+        const b = fileMap.bounds;
+        const inside = !b || (lon >= b[0] && lon <= b[2] && lat >= b[1] && lat <= b[3]);
+        if (inside && cam.zoom >= fileMap.minZoom) {
+            return;
+        }
+        setFollow('off');
+        if (b) {
+            const [w, s, e, n] = b;
+            camera.current?.fitBounds([e, n], [w, s], 40, 600);
+        } else {
+            camera.current?.setCamera({ centerCoordinate: cam.center, zoomLevel: fileMap.minZoom, animationDuration: 600 });
+        }
+        // Only when the chosen file or map readiness changes, not on every camera move.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fileMap?.id, mapReady]);
 
     const shownMarks = useMemo(() => {
         if (!prefs?.showMarks) {
@@ -842,12 +898,17 @@ const MapScreen: React.FC = () => {
                         : `${formatDistance(pathLength(draft), units)} · ${formatBearing(bearing(draft[draft.length - 2], draft[draft.length - 1]))} last leg`
                 }
                 canUndo={draft.length > 0}
+                // Measuring saves nothing, so its second button clears the points instead.
+                cancelLabel={mode === 'measure' ? 'Clear' : 'Cancel'}
+                canCancel={mode !== 'measure' || draft.length > 0}
                 doneLabel={mode === 'route' ? 'Save route' : 'Done'}
                 canDone={mode === 'measure' || draft.length >= 2}
                 onUndo={() => setDraft(d => d.slice(0, -1))}
                 onCancel={() => {
-                    setMode('browse');
                     setDraft([]);
+                    if (mode !== 'measure') {
+                        setMode('browse');
+                    }
                 }}
                 onDone={finishDraft}
             />
@@ -883,7 +944,11 @@ const MapScreen: React.FC = () => {
                 regionDidChangeDebounceTime={300}>
                 <Camera
                     ref={camera}
-                    defaultSettings={{ centerCoordinate: initial.center, zoomLevel: initial.zoom }}
+                    defaultSettings={{
+                        centerCoordinate: initial.center,
+                        zoomLevel: minZoom !== undefined ? Math.max(initial.zoom, minZoom) : initial.zoom,
+                    }}
+                    minZoomLevel={minZoom}
                     followUserLocation={follow !== 'off'}
                     followUserMode={followMode}
                     onUserTrackingModeChange={e => {
@@ -974,12 +1039,10 @@ const MapScreen: React.FC = () => {
                 ) : null}
             </MapView>
 
-            {/* Top: back, then navigation banner; right: layers and compass. */}
+            {/* Top: back; right: layers and compass. */}
             <View style={[styles.top, { top: insets.top + spacing.sm }]} pointerEvents="box-none">
                 <MapButton icon="Back" label="Back" onPress={() => navigation.goBack()} />
-                <View style={styles.topMiddle} pointerEvents="box-none">
-                    {navInfo && <NavBanner nav={navInfo} units={units} onStop={() => setNav(null)} />}
-                </View>
+                <View style={styles.flex} pointerEvents="none" />
                 <View>
                     <MapButton icon="Layers" label="Map layers" onPress={() => setLayersOpen(true)} />
                     <MapButton
@@ -1001,6 +1064,7 @@ const MapScreen: React.FC = () => {
             {/* Bottom: locate button over the panel. */}
             <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.sm }]} pointerEvents="box-none">
                 <View style={styles.locateRow} pointerEvents="box-none">
+                    <MapButton icon="PinAdd" label="Save my location" onPress={saveHere} style={styles.stackedBottom} />
                     <MapButton
                         icon={follow === 'off' ? 'LocateOff' : 'Locate'}
                         label={follow === 'off' ? 'Show my location' : follow === 'north' ? 'Turn map with heading' : 'North up'}
@@ -1022,6 +1086,7 @@ const MapScreen: React.FC = () => {
                                 onRoute={() => startDrawing('route')}
                                 onMeasure={() => startDrawing('measure')}
                                 onSaved={() => navigation.navigate('MapLibrary')}
+                                onStopNav={nav ? () => setNav(null) : undefined}
                             />
                         )}
                 </View>
@@ -1143,9 +1208,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'flex-start',
     },
-    topMiddle: {
-        flex: 1,
-        marginHorizontal: spacing.sm,
+    stackedBottom: {
+        marginBottom: spacing.sm,
     },
     stacked: {
         marginTop: spacing.sm,

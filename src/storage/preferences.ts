@@ -12,6 +12,9 @@ const notificationScheduled = flag(KEYS.notificationScheduled);
 
 export const hasUserSeenWelcome = welcome.get;
 export const setUserHasSeenWelcome = welcome.set;
+const planGuide = flag(KEYS.planGuideSeen);
+export const hasSeenPlanGuide = planGuide.get;
+export const setSeenPlanGuide = planGuide.set;
 export const isNotificationScheduled = notificationScheduled.get;
 export const setNotificationScheduled = notificationScheduled.set;
 

@@ -127,8 +127,10 @@ export const InfoPanel: React.FC<{
     onRoute: () => void;
     onMeasure: () => void;
     onSaved: () => void;
+    /** Set while following a route or going to a place: shows a Stop button. */
+    onStopNav?: () => void;
     style?: StyleProp<ViewStyle>;
-}> = ({ fix, units, recording, onRecord, onPauseResume, onStopRecording, onRoute, onMeasure, onSaved, style }) => {
+}> = ({ fix, units, recording, onRecord, onPauseResume, onStopRecording, onRoute, onMeasure, onSaved, onStopNav, style }) => {
     const { colors } = useTheme().theme;
     const live = recording.status !== 'idle';
     const speed = speedParts(fix?.speed ?? 0, units);
@@ -151,6 +153,7 @@ export const InfoPanel: React.FC<{
                 </View>
             )}
             <View style={styles.barActions}>
+                {onStopNav && <PanelAction icon="Close" label="Stop" tint={colors.accent} onPress={onStopNav} />}
                 {!live && <PanelAction icon="Record" label="Record" tint={colors.primaryRed} onPress={onRecord} />}
                 <PanelAction icon="Route" label="Plan route" onPress={onRoute} />
                 <PanelAction icon="Ruler" label="Measure" onPress={onMeasure} />
@@ -205,13 +208,15 @@ export const DrawPanel: React.FC<{
     title: string;
     detail: string;
     canUndo: boolean;
+    cancelLabel?: string;
+    canCancel?: boolean;
     doneLabel: string;
     canDone: boolean;
     onUndo: () => void;
     onCancel: () => void;
     onDone: () => void;
     style?: StyleProp<ViewStyle>;
-}> = ({ title, detail, canUndo, doneLabel, canDone, onUndo, onCancel, onDone, style }) => (
+}> = ({ title, detail, canUndo, cancelLabel = 'Cancel', canCancel = true, doneLabel, canDone, onUndo, onCancel, onDone, style }) => (
     <Panel style={style}>
         <View style={styles.selTop}>
             <View style={styles.flex}>
@@ -225,7 +230,14 @@ export const DrawPanel: React.FC<{
             <IconButton icon="Undo" accessibilityLabel="Undo last point" onPress={onUndo} tint={canUndo ? undefined : 'transparent'} />
         </View>
         <View style={styles.drawButtons}>
-            <Button label="Cancel" variant="secondary" compact onPress={onCancel} style={styles.flex} />
+            <Button
+                label={cancelLabel}
+                variant="secondary"
+                compact
+                disabled={!canCancel}
+                onPress={onCancel}
+                style={styles.flex}
+            />
             <Button label={doneLabel} compact disabled={!canDone} onPress={onDone} style={[styles.flex, styles.gap]} />
         </View>
     </Panel>

@@ -3,14 +3,14 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { RootStackNavigation, Todo } from '../../types/types';
 import Button from '../../components/Button';
-import Card from '../../components/Card';
+import { ListGroup } from '../../components/ListGroup';
 import CheckButton from '../../components/CheckButton';
 import Dialog, { DialogAction } from '../../components/Dialog';
 import ErrorPopup from '../../components/ErrorPopup';
 import Icon from '../../components/Icon';
 import SectionHeader from '../../components/SectionHeader';
 import { ThemedText } from '../../components/ThemedText';
-import { FadeIn, animateLayout, stagger } from '../../components/Motion';
+import { FadeIn, animateLayout } from '../../components/Motion';
 import { DropDialog, PickDayDialog, SkipDialog, TookDialog } from '../../components/plan/PlanDialogs';
 import { useTheme } from '../../context/ThemeContext';
 import { useHabits } from '../../hooks/useHabits';
@@ -162,35 +162,34 @@ const TodayView: React.FC = () => {
         return item.todo.dueOn ? `Your picked day · ${describeDeadline(item.todo, key)}` : describeDeadline(item.todo, key);
     };
 
-    const row = (item: TodayItem, i: number) => {
+    const row = (item: TodayItem) => {
         const late = item.kind === 'task' && item.state === 'open' && item.late > 0;
         return (
-            <FadeIn key={`${item.kind}:${item.id}`} delay={stagger(i)}>
-                <Card style={styles.row} onPress={() => setPopup({ kind: 'menu', item })} accessibilityLabel={titleOf(item)}>
-                    <CheckButton
-                        checked={item.state === 'done'}
-                        onPress={() => check(item)}
-                        accessibilityLabel={`${titleOf(item)} done`}
-                    />
-                    <View style={styles.rowText}>
-                        <ThemedText
-                            weight="medium"
-                            numberOfLines={2}
-                            color={item.state === 'open' ? 'text' : 'muted'}
-                            style={item.state === 'skipped' ? styles.struck : undefined}>
-                            {titleOf(item)}
-                        </ThemedText>
-                        <ThemedText size="small" color={late ? 'primaryRed' : 'muted'} numberOfLines={2} tabular>
-                            {describe(item)}
-                        </ThemedText>
-                    </View>
-                    <Icon
-                        name={item.kind === 'habit' ? 'Habits' : item.kind === 'slice' ? 'Layers' : 'Target'}
-                        size={16}
-                        tint={late ? colors.primaryRed : colors.muted}
-                    />
-                </Card>
-            </FadeIn>
+            <Pressable
+                key={`${item.kind}:${item.id}`}
+                onPress={() => setPopup({ kind: 'menu', item })}
+                accessibilityRole="button"
+                accessibilityLabel={titleOf(item)}
+                style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.elevated }]}>
+                <CheckButton
+                    round
+                    size={24}
+                    checked={item.state === 'done'}
+                    onPress={() => check(item)}
+                    accessibilityLabel={`${titleOf(item)} done`}
+                />
+                <View style={styles.rowText}>
+                    <ThemedText
+                        numberOfLines={2}
+                        color={item.state === 'open' ? 'text' : 'muted'}
+                        style={item.state === 'skipped' ? styles.struck : undefined}>
+                        {titleOf(item)}
+                    </ThemedText>
+                    <ThemedText size="small" color={late ? 'primaryRed' : 'muted'} numberOfLines={1} tabular>
+                        {describe(item)}
+                    </ThemedText>
+                </View>
+            </Pressable>
         );
     };
 
@@ -200,61 +199,59 @@ const TodayView: React.FC = () => {
     return (
         <ScrollView contentContainerStyle={styles.scroll}>
             {loaded && plan.must.length === 0 && finishedCount === 0 && !upNext && (
-                <Card style={styles.intro}>
-                    <ThemedText weight="strong">Nothing to do today</ThemedText>
-                    <ThemedText size="small" color="muted" style={styles.text}>
-                        Add tasks you keep putting off in Tasks, and things you must do on set days in Habits. They show
-                        up here on the day they need doing.
-                    </ThemedText>
-                </Card>
+                <ThemedText size="small" color="muted" style={styles.empty}>
+                    Nothing to do today. Tasks and habits show up here on the day they need doing.
+                </ThemedText>
             )}
 
             {plan.must.length > 0 && (
-                <>
-                    <SectionHeader title={`Must do today · ${plan.must.length}`} />
-                    {plan.must.map(row)}
-                </>
+                <FadeIn>
+                    <SectionHeader title="Must do today" />
+                    <ListGroup>{plan.must.map(row)}</ListGroup>
+                </FadeIn>
             )}
             {loaded && plan.must.length === 0 && finishedCount > 0 && (
-                <Card style={styles.intro}>
-                    <ThemedText weight="strong">All done for today</ThemedText>
-                    <ThemedText size="small" color="muted" style={styles.text}>
-                        Everything you had to do today is done. Anything else is a bonus.
+                <View style={styles.allDone}>
+                    <Icon name="Check" size={16} tint={colors.primaryGreen} />
+                    <ThemedText size="small" color="muted" style={styles.allDoneText}>
+                        All done for today. Anything else is a bonus.
                     </ThemedText>
-                </Card>
+                </View>
             )}
 
             {upNext && (
-                <>
+                <FadeIn key={upNext.id}>
                     <SectionHeader title="Up next" />
-                    <FadeIn key={upNext.id}>
-                        <Card style={styles.hero}>
-                            <ThemedText size="large" weight="bold">
-                                {upNext.title}
-                            </ThemedText>
-                            <ThemedText size="small" color="muted" style={styles.text}>
-                                {describeDeadline(upNext, key)} · then it must be done
-                            </ThemedText>
-                            <View style={styles.buttons}>
-                                <Button
-                                    label="Done"
-                                    icon="Check"
-                                    iconLeading
-                                    onPress={() => setPopup({ kind: 'took', todo: upNext, all: true })}
-                                    style={styles.flex}
-                                />
-                                <Button
-                                    label="Not now"
-                                    variant="secondary"
-                                    onPress={() => {
-                                        haptics.tap();
-                                        changeTodo(upNext, t => postpone(t, key));
-                                    }}
-                                    style={styles.gap}
-                                />
+                    <ListGroup>
+                        <View style={styles.row}>
+                            <CheckButton
+                                round
+                                size={24}
+                                checked={false}
+                                onPress={() => {
+                                    haptics.tap();
+                                    setPopup({ kind: 'took', todo: upNext, all: true });
+                                }}
+                                accessibilityLabel={`${upNext.title} done`}
+                            />
+                            <View style={styles.rowText}>
+                                <ThemedText numberOfLines={2}>{upNext.title}</ThemedText>
+                                <ThemedText size="small" color="muted" numberOfLines={1}>
+                                    {describeDeadline(upNext, key)}
+                                </ThemedText>
                             </View>
-                        </Card>
-                    </FadeIn>
+                            <Button
+                                label="Later"
+                                variant="ghost"
+                                compact
+                                onPress={() => {
+                                    haptics.tap();
+                                    changeTodo(upNext, t => postpone(t, key));
+                                }}
+                                style={styles.later}
+                            />
+                        </View>
+                    </ListGroup>
                     {plan.waiting > 0 && (
                         <Pressable onPress={() => navigation.navigate('BottomTabs', { screen: 'Habits', params: { view: 'tasks' } })}>
                             <ThemedText size="small" color="muted" style={styles.more}>
@@ -262,7 +259,7 @@ const TodayView: React.FC = () => {
                             </ThemedText>
                         </Pressable>
                     )}
-                </>
+                </FadeIn>
             )}
 
             {finishedCount > 0 && (
@@ -282,7 +279,7 @@ const TodayView: React.FC = () => {
                             />
                         }
                     />
-                    {showDone && plan.finished.map(row)}
+                    {showDone && <ListGroup>{plan.finished.map(row)}</ListGroup>}
                 </>
             )}
 
@@ -385,34 +382,32 @@ const styles = StyleSheet.create({
     row: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: spacing.sm - 2,
-        paddingVertical: spacing.sm + 4,
+        paddingVertical: spacing.sm + 2,
+        paddingHorizontal: spacing.md,
+        minHeight: 56,
     },
     rowText: {
         flex: 1,
-        marginHorizontal: spacing.sm + 2,
+        marginLeft: spacing.md,
     },
     struck: {
         textDecorationLine: 'line-through',
     },
-    intro: {
-        marginTop: spacing.sm,
+    empty: {
+        marginHorizontal: gutter + 2,
+        marginTop: spacing.xl,
     },
-    hero: {
-        padding: spacing.lg,
-    },
-    text: {
-        marginTop: spacing.xs,
-    },
-    buttons: {
+    allDone: {
         flexDirection: 'row',
-        marginTop: spacing.md,
+        alignItems: 'center',
+        marginHorizontal: gutter + 2,
+        marginTop: spacing.xl,
     },
-    flex: {
-        flex: 1,
-    },
-    gap: {
+    allDoneText: {
         marginLeft: spacing.sm,
+    },
+    later: {
+        marginRight: -spacing.sm,
     },
     more: {
         marginHorizontal: gutter + 2,

@@ -103,6 +103,7 @@ import {
     LocateFixed,
     Map as MapGlyph,
     MapPin,
+    MapPinPlus,
     Mountain,
     Navigation,
     Route,
@@ -219,6 +220,7 @@ const ICONS = {
     // Map
     Map: MapGlyph,
     Pin: MapPin,
+    PinAdd: MapPinPlus,
     Navigate: Navigation,
     Compass: Compass,
     Locate: LocateFixed,

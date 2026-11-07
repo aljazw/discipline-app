@@ -48,6 +48,8 @@ export const KEYS = {
     planCalls: '@plan_calls',
     /** Set once habits got a kind and a time (the Today / Tasks / Habits / Time plan). */
     planKindsMigrated: '@plan_kinds_migrated',
+    /** The Plan guide (what Today, Tasks, Habits and Time are for) was shown once. */
+    planGuideSeen: '@plan_guide_seen',
 } as const;
 
 // ---- Cache ------------------------------------------------------------------

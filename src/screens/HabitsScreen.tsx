@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { RootStackNavigation, RoutineView, TabParamList } from '../types/types';
 import BaseScreen from '../components/BaseScreen';
 import IconButton from '../components/IconButton';
+import PlanGuide from '../components/plan/PlanGuide';
+import { hasSeenPlanGuide, setSeenPlanGuide } from '../storage';
 import Segmented from '../components/Segmented';
 import { usePreloadTabs } from '../navigation/usePreloadTabs';
 import { gutter, spacing } from '../theme';
@@ -16,7 +18,7 @@ const VIEWS: { value: RoutineView; label: string }[] = [
     { value: 'today', label: 'Today' },
     { value: 'tasks', label: 'Tasks' },
     { value: 'habits', label: 'Habits' },
-    { value: 'time', label: 'Time' },
+    { value: 'time', label: 'Routines' },
 ];
 
 const SUBTITLES: Record<RoutineView, string> = {
@@ -36,7 +38,18 @@ const HabitsScreen: React.FC = () => {
     const route = useRoute<RouteProp<TabParamList, 'Habits'>>();
     const [view, setView] = useState<RoutineView>(route.params?.view ?? 'today');
     const [now, setNow] = useState(new Date());
+    const [guide, setGuide] = useState(false);
     usePreloadTabs();
+
+    // The first visit explains the four views; the ? button brings it back.
+    useEffect(() => {
+        hasSeenPlanGuide().then(seen => {
+            if (!seen) {
+                setGuide(true);
+                setSeenPlanGuide(true);
+            }
+        });
+    }, []);
 
     // Opened from elsewhere (a call, a notification) with a view in mind.
     useEffect(() => {
@@ -63,21 +76,26 @@ const HabitsScreen: React.FC = () => {
             title={title}
             subtitle={subtitle}
             headerRight={
-                view === 'habits' ? (
-                    <IconButton
-                        icon="Plus"
-                        variant="filled"
-                        accessibilityLabel="Add a habit"
-                        onPress={() => navigation.navigate('TaskEditor', { kind: 'habit' })}
-                    />
-                ) : view === 'time' ? (
-                    <IconButton
-                        icon="Plus"
-                        variant="filled"
-                        accessibilityLabel="Add a routine"
-                        onPress={() => navigation.navigate('TaskEditor', { kind: 'routine' })}
-                    />
-                ) : undefined
+                <View style={styles.header}>
+                    <IconButton icon="Info" accessibilityLabel="How Plan works" onPress={() => setGuide(true)} />
+                    {view === 'habits' ? (
+                        <IconButton
+                            icon="Plus"
+                            variant="filled"
+                            accessibilityLabel="Add a habit"
+                            onPress={() => navigation.navigate('TaskEditor', { kind: 'habit' })}
+                            style={styles.add}
+                        />
+                    ) : view === 'time' ? (
+                        <IconButton
+                            icon="Plus"
+                            variant="filled"
+                            accessibilityLabel="Add a routine"
+                            onPress={() => navigation.navigate('TaskEditor', { kind: 'routine' })}
+                            style={styles.add}
+                        />
+                    ) : null}
+                </View>
             }>
             <Segmented options={VIEWS} value={view} onChange={setView} style={styles.views} />
             {view === 'today' ? (
@@ -89,11 +107,19 @@ const HabitsScreen: React.FC = () => {
             ) : (
                 <TimeView key={now.toDateString()} />
             )}
+            <PlanGuide visible={guide} onClose={() => setGuide(false)} />
         </BaseScreen>
     );
 };
 
 const styles = StyleSheet.create({
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    add: {
+        marginLeft: spacing.sm,
+    },
     views: {
         marginHorizontal: gutter,
         marginBottom: spacing.xs,
