@@ -77,7 +77,7 @@ const HabitsScreen: React.FC = () => {
             subtitle={subtitle}
             headerRight={
                 <View style={styles.header}>
-                    <IconButton icon="Info" accessibilityLabel="How Plan works" onPress={() => setGuide(true)} />
+                    <IconButton icon="Help" accessibilityLabel="How Plan works" onPress={() => setGuide(true)} />
                     {view === 'habits' ? (
                         <IconButton
                             icon="Plus"

@@ -5,11 +5,31 @@ import Dialog from '../Dialog';
 import Icon, { IconName } from '../Icon';
 import { ThemedText } from '../ThemedText';
 
-const PARTS: { icon: IconName; title: string; text: string }[] = [
-    { icon: 'Calendar', title: 'Today', text: 'What needs doing today, gathered from the other three.' },
-    { icon: 'Target', title: 'Tasks', text: 'One-time things. You get a few days, then they must be done.' },
-    { icon: 'Habits', title: 'Habits', text: 'On set days at a set time. The app calls you, and skipping takes a reason.' },
-    { icon: 'Time', title: 'Routines', text: 'Things you do anyway, like work or sleep. Only the time is counted.' },
+const PARTS: { icon: IconName; title: string; text: string; example: string }[] = [
+    {
+        icon: 'Calendar',
+        title: 'Today',
+        text: 'What needs doing today, gathered from the other three.',
+        example: 'Gym at 7:00, pay rent, work 9–17',
+    },
+    {
+        icon: 'Target',
+        title: 'Tasks',
+        text: 'One-time things. You get a few days, then they must be done.',
+        example: 'Pay rent, or write a 20-page report',
+    },
+    {
+        icon: 'Habits',
+        title: 'Habits',
+        text: 'On set days at a set time. The app calls you, and skipping takes a reason.',
+        example: 'Gym on Mon, Wed and Fri at 7:00',
+    },
+    {
+        icon: 'Time',
+        title: 'Routines',
+        text: 'Things you do anyway, like work or sleep. Only the time is counted.',
+        example: 'Work 9–17, sleep 23–7',
+    },
 ];
 
 /** A short guide to the Plan tab's four views: Today, Tasks, Habits, Routines. */
@@ -29,6 +49,9 @@ const PlanGuide: React.FC<{ visible: boolean; onClose: () => void }> = ({ visibl
                         <ThemedText size="small" color="muted">
                             {p.text}
                         </ThemedText>
+                        <ThemedText size="small" style={[styles.example, { color: colors.accent }]}>
+                            {`e.g. ${p.example}`}
+                        </ThemedText>
                     </View>
                 </View>
             ))}
@@ -47,6 +70,9 @@ const styles = StyleSheet.create({
     },
     text: {
         flex: 1,
+    },
+    example: {
+        marginTop: 2,
     },
 });
 
