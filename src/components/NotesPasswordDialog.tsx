@@ -164,8 +164,8 @@ const NotesPasswordDialog: React.FC<Props> = ({ mode, onClose, onDone, onReset }
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
-            autoComplete="off"
-            importantForAutofill="no"
+            autoComplete={mode === 'unlock' ? 'current-password' : 'new-password'}
+            importantForAutofill="yes"
             autoFocus={autoFocus}
             maxLength={200}
             onSubmitEditing={mode === 'unlock' ? submit : undefined}

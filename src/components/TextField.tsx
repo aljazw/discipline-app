@@ -25,6 +25,9 @@ const TextField: React.FC<TextFieldProps> = ({
     const { colors } = useTheme().theme;
     return (
         <TextInput
+            // No password-manager suggestions unless a field asks for them.
+            autoComplete="off"
+            importantForAutofill="no"
             {...rest}
             value={value}
             onChangeText={text => onChangeText(maxLength ? text.slice(0, maxLength) : text)}

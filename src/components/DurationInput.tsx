@@ -31,6 +31,8 @@ const DurationInput: React.FC<DurationInputProps> = ({ minutes, seconds, onChang
                 }}
                 placeholder="0"
                 placeholderTextColor={colors.muted}
+                autoComplete="off"
+                importantForAutofill="no"
                 selectionColor={colors.accent}
                 keyboardType="number-pad"
                 maxLength={2}
@@ -51,6 +53,8 @@ const DurationInput: React.FC<DurationInputProps> = ({ minutes, seconds, onChang
                 }}
                 placeholder="00"
                 placeholderTextColor={colors.muted}
+                autoComplete="off"
+                importantForAutofill="no"
                 selectionColor={colors.accent}
                 keyboardType="number-pad"
                 maxLength={2}

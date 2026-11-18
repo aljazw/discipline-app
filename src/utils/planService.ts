@@ -8,7 +8,7 @@ import { NativeModules } from 'react-native';
 import { DayHours, DayPlan, Habit, Todo } from '../types/types';
 import { addDays, fromDateKey, newId, toDateKey } from './dates';
 import { isScheduled, markDone, skipHabit } from './habits';
-import { formatDuration, minutesNow, routineFromLegacy, timestampOf } from './dayPlan';
+import { minutesNow, routineFromLegacy, timestampOf } from './dayPlan';
 import { callsFor, dayBounds } from './plan';
 import { newTodo } from './todos';
 import {
@@ -349,6 +349,7 @@ const syncOnce = async (): Promise<void> => {
                 const habit = habits.find(h => h.id === habitId);
                 return (
                     !prefs.reminders ||
+                    habit?.kind === 'routine' ||
                     date !== today.date ||
                     !habit ||
                     !stillOpen({ kind: habit.kind, id: habitId }, today, habits)
@@ -366,11 +367,11 @@ const syncOnce = async (): Promise<void> => {
         dates.forEach((date, i) => {
             const day = days[i];
             for (const h of habits) {
-                if (!isScheduled(h, date) || h.createdAt > day.date) {
+                // Routines aren't asked about: their usual length is counted.
+                if (h.kind === 'routine' || !isScheduled(h, date) || h.createdAt > day.date) {
                     continue;
                 }
-                const routine = h.kind === 'routine';
-                const start = routine ? h.time : day.started[h.id];
+                const start = day.started[h.id];
                 if (start === undefined || !stillOpen({ kind: h.kind, id: h.id }, day, habits)) {
                     continue;
                 }
@@ -383,10 +384,8 @@ const syncOnce = async (): Promise<void> => {
                     notifee.createTriggerNotification(
                         notification(
                             `${ID_PREFIX}${day.date}:${h.id}`,
-                            routine ? `${h.title}: finished?` : `${h.title}: done?`,
-                            routine
-                                ? `Tap Finished when it ends. If you don’t, the usual ${formatDuration(h.duration)} is counted.`
-                                : 'You started it. Tap Done when it’s finished.',
+                            `${h.title}: done?`,
+                            'You started it. Tap Done when it’s finished.',
                             asks,
                         ),
                         { type: TriggerType.TIMESTAMP, timestamp: at },

@@ -230,6 +230,8 @@ const NoteEditorScreen: React.FC = () => {
                         onChangeText={title => edit({ title })}
                         placeholder="Title"
                         placeholderTextColor={colors.muted}
+                        autoComplete="off"
+                        importantForAutofill="no"
                         selectionColor={colors.accent}
                         style={[styles.title, { color: colors.text }]}
                         maxLength={200}
@@ -242,6 +244,8 @@ const NoteEditorScreen: React.FC = () => {
                         onChangeText={body => edit({ body })}
                         placeholder="Note"
                         placeholderTextColor={colors.muted}
+                        autoComplete="off"
+                        importantForAutofill="no"
                         selectionColor={colors.accent}
                         style={[styles.body, { color: colors.text }]}
                         multiline

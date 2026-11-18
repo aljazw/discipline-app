@@ -90,6 +90,8 @@ const TimeInput: React.FC<TimeInputProps> = ({ label, hourValue, minutesValue, s
                     }}
                     placeholder="00"
                     placeholderTextColor={theme.colors.muted}
+                    autoComplete="off"
+                    importantForAutofill="no"
                     selectionColor={theme.colors.accent}
                     keyboardType="numeric"
                     maxLength={2}
@@ -109,6 +111,8 @@ const TimeInput: React.FC<TimeInputProps> = ({ label, hourValue, minutesValue, s
                     }}
                     placeholder="00"
                     placeholderTextColor={theme.colors.muted}
+                    autoComplete="off"
+                    importantForAutofill="no"
                     selectionColor={theme.colors.accent}
                     keyboardType="numeric"
                     maxLength={2}

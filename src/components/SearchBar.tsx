@@ -31,6 +31,8 @@ const SearchBar: React.FC<SearchBarProps> = ({ placeholder = 'Search...', onSear
                 style={[styles.input, { color: theme.colors.text }]}
                 placeholder={placeholder}
                 placeholderTextColor={theme.colors.muted}
+                autoComplete="off"
+                importantForAutofill="no"
                 onChangeText={update}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
