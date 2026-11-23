@@ -99,7 +99,6 @@ const PassphrasePopup: React.FC<PassphrasePopupProps> = ({
                 importantForAutofill="no"
                 spellCheck={false}
                 multiline
-                keyboardType="visible-password"
                 textAlignVertical="top"
             />
 

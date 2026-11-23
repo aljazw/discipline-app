@@ -20,6 +20,7 @@ import {
     getLegacyPlans,
     getPlanPrefs,
     getTodos,
+    getWorkoutSession,
     onStorageChange,
     saveHabits,
     saveTodo,
@@ -272,7 +273,11 @@ const INPUTS: string[] = [
     STORAGE_KEYS.planPrefs,
     STORAGE_KEYS.dayHours,
     STORAGE_KEYS.sleepSchedule,
+    STORAGE_KEYS.workoutSession,
 ];
+
+/** A workout left open longer than this is treated as abandoned, not as still going. */
+const WORKOUT_STALE_AFTER = 6 * 60 * 60 * 1000;
 
 /**
  * Keeps calls and notifications in step with the data (once per burst of
@@ -329,8 +334,17 @@ const stillOpen = (asks: { kind: string; id: string }, day: DayPlan, habits: Hab
 
 const syncOnce = async (): Promise<void> => {
     try {
-        const [habits, todos, hours, prefs] = await Promise.all([getHabits(), getTodos(), getDayHours(), getPlanPrefs()]);
+        const [allHabits, todos, hours, prefs, session] = await Promise.all([
+            getHabits(),
+            getTodos(),
+            getDayHours(),
+            getPlanPrefs(),
+            getWorkoutSession(),
+        ]);
         const now = new Date();
+        // Mid-workout there's nothing to remind about: the workout tasks are already being done.
+        const training = !!session && now.getTime() - session.startedAt < WORKOUT_STALE_AFTER;
+        const habits = training ? allHabits.filter(h => h.link !== 'workout') : allHabits;
         const dates = [now, addDays(now, 1)];
         const days = await Promise.all(dates.map(d => getDay(toDateKey(d))));
 

@@ -212,26 +212,45 @@ export const nextRepeat = (mode: RepeatMode): RepeatMode => REPEATS[(REPEATS.ind
 
 // ---- Library ----------------------------------------------------------------
 
-const AUDIO_PERMISSION =
-    Platform.OS === 'android' && Number(Platform.Version) >= 33
-        ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO
-        : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+const NEW_MEDIA_PERMISSIONS = Platform.OS === 'android' && Number(Platform.Version) >= 33;
+
+/** Songs, and from Android 13 the sound of mp4 videos (a separate permission). */
+const LIBRARY_PERMISSIONS = NEW_MEDIA_PERMISSIONS
+    ? [PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO, PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO]
+    : [PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE];
 
 export type LibraryAccess = 'granted' | 'ask' | 'blocked';
 
+/** Songs decide: with only video refused the library still opens, just without the mp4 files. */
 export const checkLibraryAccess = async (): Promise<LibraryAccess> =>
-    (await PermissionsAndroid.check(AUDIO_PERMISSION)) ? 'granted' : 'ask';
+    (await PermissionsAndroid.check(LIBRARY_PERMISSIONS[0])) ? 'granted' : 'ask';
 
 export const requestLibraryAccess = async (): Promise<LibraryAccess> => {
-    const result = await PermissionsAndroid.request(AUDIO_PERMISSION);
-    return result === PermissionsAndroid.RESULTS.GRANTED
-        ? 'granted'
-        : result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-        ? 'blocked'
-        : 'ask';
+    const results = await PermissionsAndroid.requestMultiple(LIBRARY_PERMISSIONS);
+    const values = Object.values(results);
+    // Songs matter most: only refusing audio keeps the library closed.
+    const audio = results[LIBRARY_PERMISSIONS[0]];
+    if (audio === PermissionsAndroid.RESULTS.GRANTED) {
+        return 'granted';
+    }
+    return values.includes(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) ? 'blocked' : 'ask';
 };
 
-/** Every audio file on the phone, by title. */
+let askedVideo = false;
+
+/** Android 13+: asks once per launch for the video permission, so mp4 files show up for people who had only allowed songs. */
+export const ensureVideoAccess = async (): Promise<void> => {
+    if (!NEW_MEDIA_PERMISSIONS || askedVideo) {
+        return;
+    }
+    askedVideo = true;
+    const video = PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO;
+    if (!(await PermissionsAndroid.check(video))) {
+        await PermissionsAndroid.request(video);
+    }
+};
+
+/** Every audio file and mp4 video on the phone, by title. */
 export const getLibrary = async (): Promise<Track[]> => (Music ? parseLibrary(await Music.getLibrary()) : []);
 
 // ---- Folders ----------------------------------------------------------------

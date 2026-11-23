@@ -235,6 +235,17 @@ class MusicModule(private val ctx: ReactApplicationContext) : ReactContextBaseJa
 
     private fun queryLibrary(): JSONArray {
         val songs = JSONArray()
+        queryAudio(songs)
+        // Without video access (Android 13+) the songs still show; only the mp4 files are left out.
+        try {
+            queryVideos(songs)
+        } catch (e: SecurityException) {
+            // not granted
+        }
+        return songs
+    }
+
+    private fun queryAudio(songs: JSONArray) {
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         // RELATIVE_PATH ("Music/Gym/") exists from Android 10; before that the folder comes from the file path.
         val folderColumn =
@@ -277,7 +288,52 @@ class MusicModule(private val ctx: ReactApplicationContext) : ReactContextBaseJa
                     )
                 }
             }
-        return songs
+    }
+
+    /** mp4 videos, played as music (only their sound). Camera and screen recordings stay out of "All songs". */
+    private fun queryVideos(songs: JSONArray) {
+        val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val folderColumn =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Video.Media.RELATIVE_PATH
+            else @Suppress("DEPRECATION") MediaStore.Video.Media.DATA
+        val columns = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.TITLE,
+            MediaStore.Video.Media.ARTIST,
+            MediaStore.Video.Media.DURATION,
+            folderColumn,
+        )
+        ctx.contentResolver.query(
+            collection,
+            columns,
+            "${MediaStore.Video.Media.MIME_TYPE} = ?",
+            arrayOf("video/mp4"),
+            "${MediaStore.Video.Media.TITLE} COLLATE NOCASE",
+        )?.use { c ->
+            val id = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val title = c.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
+            val artist = c.getColumnIndexOrThrow(MediaStore.Video.Media.ARTIST)
+            val duration = c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+            val folder = c.getColumnIndexOrThrow(folderColumn)
+            while (c.moveToNext()) {
+                val videoId = c.getLong(id)
+                val path = toFolder(c.getString(folder))
+                val own = path.startsWith("DCIM/") || path.contains("Screenshots/") || path.contains("Screen recordings/")
+                songs.put(
+                    JSONObject()
+                        // Video and audio ids are separate number spaces.
+                        .put("id", "v$videoId")
+                        .put("uri", ContentUris.withAppendedId(collection, videoId).toString())
+                        .put("title", c.getString(title) ?: "")
+                        .put("artist", c.getString(artist)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: "")
+                        .put("album", "")
+                        .put("albumId", -1)
+                        .put("durationMs", c.getLong(duration))
+                        .put("music", !own)
+                        .put("folder", path),
+                )
+            }
+        }
     }
 
     /** "Music/Gym/" style folder, from RELATIVE_PATH as is or from a full file path. */

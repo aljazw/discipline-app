@@ -9,7 +9,7 @@ import EmptyState from '../components/EmptyState';
 import Icon from '../components/Icon';
 import IconTile from '../components/IconTile';
 import ModalPanel from '../components/ModalPanel';
-import { NowPlaying } from '../components/MusicPlayer';
+import { NowPlaying, SLEEP_MINUTES, minutesLabel } from '../components/MusicPlayer';
 import SearchBar from '../components/SearchBar';
 import { ThemedText } from '../components/ThemedText';
 import { useTheme } from '../context/ThemeContext';
@@ -18,6 +18,7 @@ import {
     LibraryAccess,
     Track,
     checkLibraryAccess,
+    ensureVideoAccess,
     folderName,
     formatTime,
     getLibrary,
@@ -86,6 +87,55 @@ const FolderPicker: React.FC<{
     );
 };
 
+/** Plays the list on repeat and stops by itself after the chosen time. */
+const GoodNight: React.FC<{
+    visible: boolean;
+    songs: Track[];
+    source: string;
+    onClose: () => void;
+}> = ({ visible, songs, source, onClose }) => {
+    const { colors } = useTheme().theme;
+    const [minutes, setMinutes] = useState(30);
+
+    const start = async () => {
+        onClose();
+        await music.play(songs, 0, false);
+        await music.setRepeat('all');
+        await music.sleepTimer(minutes);
+    };
+
+    return (
+        <ModalPanel visible={visible} onClose={onClose}>
+            <ThemedText size="large" weight="bold">
+                Good night
+            </ThemedText>
+            <ThemedText size="small" color="muted" style={styles.pickerHint}>
+                Plays {source} on repeat, then fades out and stops by itself, even with the screen off.
+            </ThemedText>
+            <View style={styles.folders}>
+                {SLEEP_MINUTES.map(m => {
+                    const selected = m === minutes;
+                    return (
+                        <Pressable
+                            key={m}
+                            onPress={() => setMinutes(m)}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected }}
+                            style={({ pressed }) => [styles.folder, pressed && { backgroundColor: colors.elevated }]}>
+                            <ThemedText weight="medium" color={selected ? 'accent' : 'text'} style={styles.rowText}>
+                                {minutesLabel(m)}
+                            </ThemedText>
+                            {selected && <Icon name="Check" size={18} tint={colors.accent} />}
+                        </Pressable>
+                    );
+                })}
+            </View>
+            <Button label="Start" onPress={start} disabled={songs.length === 0} />
+            <Button label="Cancel" variant="ghost" onPress={onClose} />
+        </ModalPanel>
+    );
+};
+
 const matches = (track: Track, query: string) =>
     track.title.toLowerCase().includes(query) ||
     track.artist.toLowerCase().includes(query) ||
@@ -101,6 +151,7 @@ const MusicScreen: React.FC = () => {
     const [query, setQuery] = useState('');
     const [folder, setFolder] = useState('');
     const [picking, setPicking] = useState(false);
+    const [goodNight, setGoodNight] = useState(false);
 
     const load = useCallback(async () => {
         try {
@@ -108,6 +159,7 @@ const MusicScreen: React.FC = () => {
             const now = await checkLibraryAccess();
             setAccess(prev => (prev === 'blocked' && now !== 'granted' ? prev : now));
             if (now === 'granted') {
+                await ensureVideoAccess().catch(() => {});
                 setLibrary(await getLibrary());
             }
         } catch (error) {
@@ -206,6 +258,15 @@ const MusicScreen: React.FC = () => {
                     <Icon name="Down" size={14} tint={colors.muted} />
                 </Pressable>
                 <Button
+                    label="Good night"
+                    icon="Moon"
+                    iconLeading
+                    variant="ghost"
+                    compact
+                    disabled={shown.length === 0}
+                    onPress={() => setGoodNight(true)}
+                />
+                <Button
                     label="Shuffle"
                     icon="Shuffle"
                     iconLeading
@@ -271,6 +332,12 @@ const MusicScreen: React.FC = () => {
                     }
                 />
             )}
+            <GoodNight
+                visible={goodNight}
+                songs={shown}
+                source={folder ? `“${folderName(folder)}”` : 'all your songs'}
+                onClose={() => setGoodNight(false)}
+            />
             <FolderPicker
                 visible={picking}
                 library={library}

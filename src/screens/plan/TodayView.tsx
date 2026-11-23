@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { RootStackNavigation, Todo } from '../../types/types';
@@ -15,7 +15,7 @@ import { DropDialog, PickDayDialog, SkipDialog, TookDialog } from '../../compone
 import { useTheme } from '../../context/ThemeContext';
 import { useHabits } from '../../hooks/useHabits';
 import { useTodos } from '../../hooks/useTodos';
-import { updateHabit, updateTodo } from '../../storage';
+import { getShowDoneToday, setShowDoneToday, updateHabit, updateTodo } from '../../storage';
 import { gutter, spacing } from '../../theme';
 import { toDateKey } from '../../utils/dates';
 import { formatDuration, formatMinutes } from '../../utils/dayPlan';
@@ -51,6 +51,11 @@ const TodayView: React.FC = () => {
     const { todos, loaded: todosLoaded } = useTodos();
     const [popup, setPopup] = useState<Popup | null>(null);
     const [showDone, setShowDone] = useState(false);
+    useEffect(() => {
+        getShowDoneToday()
+            .then(setShowDone)
+            .catch(() => {});
+    }, []);
     const [failed, setFailed] = useState(false);
     const close = () => setPopup(null);
 
@@ -274,6 +279,7 @@ const TodayView: React.FC = () => {
                                 onPress={() => {
                                     animateLayout();
                                     setShowDone(!showDone);
+                                    setShowDoneToday(!showDone).catch(() => {});
                                 }}
                                 style={styles.headerButton}
                             />

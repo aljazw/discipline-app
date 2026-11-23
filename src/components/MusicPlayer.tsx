@@ -95,9 +95,9 @@ const SeekBar: React.FC<{ state: MusicState }> = ({ state }) => {
     );
 };
 
-const SLEEP_MINUTES = [15, 30, 45, 60, 90];
+export const SLEEP_MINUTES = [15, 30, 45, 60, 90];
 
-const minutesLabel = (m: number) => (m < 60 ? `${m} minutes` : m === 60 ? '1 hour' : `${m / 60} hours`);
+export const minutesLabel = (m: number) => (m < 60 ? `${m} minutes` : m === 60 ? '1 hour' : `${m / 60} hours`);
 
 /** Stops the music after a while or at the end of this song, fading out first. Works with the app closed. */
 const SleepTimer: React.FC<{ state: MusicState }> = ({ state }) => {

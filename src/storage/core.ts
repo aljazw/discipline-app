@@ -35,6 +35,7 @@ export const KEYS = {
     planNudges: '@plan_nudges',
     promiseVideoShown: '@promise_video_shown',
     musicFolder: '@music_folder',
+    showDoneToday: '@show_done_today',
     notes: '@notes',
     /** The protected notes' wrapped key (never the password); see NoteCryptoModule.kt. */
     notesVault: '@notes_vault',

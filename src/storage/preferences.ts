@@ -15,6 +15,10 @@ export const setUserHasSeenWelcome = welcome.set;
 const planGuide = flag(KEYS.planGuideSeen);
 export const hasSeenPlanGuide = planGuide.get;
 export const setSeenPlanGuide = planGuide.set;
+const showDoneToday = flag(KEYS.showDoneToday);
+/** Whether Today's "Done today" list is open; kept between launches. */
+export const getShowDoneToday = showDoneToday.get;
+export const setShowDoneToday = showDoneToday.set;
 export const isNotificationScheduled = notificationScheduled.get;
 export const setNotificationScheduled = notificationScheduled.set;
 
